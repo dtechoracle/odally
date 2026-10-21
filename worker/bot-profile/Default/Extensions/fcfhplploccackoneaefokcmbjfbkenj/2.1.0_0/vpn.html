@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>1clickVPN – Подключиться через AltaVPN</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="stats.js"></script>
+    <style>
+        @font-face {
+            font-family: 'Nunito 400';
+            src: url('./fonts/Nunito-Regular.ttf');
+            font-style: normal;
+            font-weight: 400;
+        }
+
+        @font-face {
+            font-family: 'Nunito 600';
+            src: url('./fonts/Nunito-SemiBold.ttf');
+            font-style: normal;
+            font-weight: 600;
+        }
+
+        @font-face {
+            font-family: 'Nunito 700';
+            src: url('./fonts//Nunito-Bold.ttf');
+            font-style: normal;
+            font-weight: 700;
+        }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --primary: #f97316;
+            --primary-h: #fb923c;
+            --primary-dk: #ea6c00;
+            --primary-bg: #fff7ed;
+            --primary-bd: rgba(249, 115, 22, 0.22);
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --border: #e2e8f0;
+            --text: #0f172a;
+            --muted: #64748b;
+            --light: #94a3b8;
+            --green: #059669;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+        body {
+            font-family: 'Nunito 400';
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            width: 100%;
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo {
+            display: block;
+            width: 139px;
+            height: 34px;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: contain;
+            background-image: url('./logo-text.svg');
+        }
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-family: 'Nunito 700';
+            color: #fff;
+            letter-spacing: -0.5px;
+        }
+        .logo-text {
+            font-size: 1.35rem;
+            font-family: 'Nunito 700';
+            color: var(--text);
+            letter-spacing: -0.3px;
+        }
+        .logo-text em {
+            font-style: normal;
+            color: var(--primary);
+        }
+
+        .page-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 24px 80px;
+            gap: 72px;
+        }
+
+        .promo-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 28px;
+            padding: 64px 72px;
+            max-width: 710px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.07);
+        }
+
+        .shield-wrap {
+            width: 88px;
+            height: 88px;
+            margin: 0 auto 32px;
+            background: var(--primary-bg);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .shield-wrap::after {
+            content: '';
+            position: absolute;
+            inset: -6px;
+            border-radius: 50%;
+            border: 2px dashed rgba(249, 115, 22, 0.25);
+        }
+        .shield-icon {
+            font-size: 2.6rem;
+            line-height: 1;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 100px;
+            padding: 5px 16px;
+            font-size: 0.82rem;
+            font-family: 'Nunito 600';
+            color: #dc2626;
+            margin-bottom: 26px;
+        }
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #ef4444;
+            flex-shrink: 0;
+            animation: pulse-red 1.6s ease-in-out infinite;
+        }
+        @keyframes pulse-red {
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.5;
+                transform: scale(0.7);
+            }
+        }
+
+        .promo-headline {
+            font-size: 1.8rem;
+            font-family: 'Nunito 700';
+            color: var(--text);
+            line-height: 1.3;
+            letter-spacing: -0.3px;
+            margin-bottom: 16px;
+        }
+        .promo-headline span {
+            color: var(--primary);
+        }
+
+        .promo-body {
+            font-size: 1.05rem;
+            color: var(--muted);
+            line-height: 1.65;
+            margin-bottom: 12px;
+            max-width: 460px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .promo-body a {
+            color: var(--primary);
+            font-family: 'Nunito 600';
+            text-decoration: none;
+            border-bottom: 1px solid rgba(249, 115, 22, 0.3);
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .promo-body a:hover {
+            color: var(--primary-dk);
+            border-color: var(--primary-dk);
+        }
+
+        .alt-label {
+            font-size: 0.88rem;
+            color: var(--light);
+            margin-bottom: 32px;
+        }
+        .alt-label a {
+            color: var(--primary);
+            font-family: 'Nunito 600';
+            text-decoration: none;
+        }
+        .alt-label a:hover {
+            color: var(--primary-dk);
+            text-decoration: underline;
+        }
+
+        .btn-connect {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 14px;
+            padding: 18px 44px;
+            font-size: 1.12rem;
+            font-family: 'Nunito 700';
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: 0 6px 24px rgba(249, 115, 22, 0.36);
+            transition: background 0.18s, transform 0.15s, box-shadow 0.18s;
+            width: 100%;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+        .btn-connect:hover {
+            background: var(--primary-dk);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 32px rgba(249, 115, 22, 0.42);
+        }
+        .btn-connect:active {
+            transform: translateY(0);
+        }
+
+        .tg-note {
+            font-size: 0.84rem;
+            color: var(--light);
+            margin-bottom: 0;
+        }
+        .tg-note strong {
+            color: var(--muted);
+            font-family: 'Nunito 600';
+        }
+
+        .trust-strip {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 36px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border);
+        }
+        .trust-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.82rem;
+            color: var(--muted);
+            font-family: 'Nunito 600';
+        }
+        .trust-item .ti {
+            font-size: 1rem;
+        }
+
+        .section-wrap {
+            max-width: 1100px;
+            width: 100%;
+        }
+        .section-label {
+            display: inline-block;
+            background: var(--primary-bg);
+            color: var(--primary-dk);
+            font-size: 0.78rem;
+            font-family: 'Nunito 700';
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: 100px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 2rem;
+            font-family: 'Nunito 700';
+            color: var(--text);
+            letter-spacing: -0.4px;
+            line-height: 1.25;
+            margin-bottom: 10px;
+        }
+        .section-sub {
+            font-size: 1.05rem;
+            color: var(--muted);
+            line-height: 1.6;
+            max-width: 560px;
+            margin-bottom: 44px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+        }
+        .feat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 26px 22px;
+            transition: transform 0.18s, box-shadow 0.18s;
+        }
+        .feat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+        }
+        .feat-emoji {
+            font-size: 1.7rem;
+            margin-bottom: 12px;
+            display: block;
+        }
+        .feat-title {
+            font-size: 1rem;
+            font-family: 'Nunito 700';
+            color: var(--text);
+            margin-bottom: 5px;
+        }
+        .feat-desc {
+            font-size: 0.86rem;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .faq-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        details.faq-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: box-shadow 0.18s;
+        }
+        details.faq-item[open] {
+            box-shadow: 0 4px 20px rgba(249, 115, 22, 0.12);
+            border-color: rgba(249, 115, 22, 0.35);
+        }
+        details.faq-item summary {
+            padding: 22px 28px;
+            font-size: 1rem;
+            font-family: 'Nunito 700';
+            color: var(--text);
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            user-select: none;
+        }
+        details.faq-item summary::-webkit-details-marker {
+            display: none;
+        }
+        .faq-chevron {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            background: var(--bg);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.22s, background 0.18s;
+            font-style: normal;
+            font-size: 0.75rem;
+            color: var(--muted);
+        }
+        details.faq-item[open] .faq-chevron {
+            transform: rotate(180deg);
+            background: var(--primary-bg);
+            color: var(--primary);
+        }
+        .faq-body {
+            padding: 18px 28px 24px;
+            font-size: 0.97rem;
+            color: var(--muted);
+            line-height: 1.7;
+            border-top: 1px solid var(--border);
+        }
+        .faq-body a {
+            color: var(--primary);
+            font-family: 'Nunito 600';
+            text-decoration: none;
+        }
+        .faq-body a:hover {
+            text-decoration: underline;
+        }
+
+        .cta-banner {
+            max-width: 1100px;
+            width: 100%;
+            background: linear-gradient(135deg, #f97316 0%, #ea6c00 100%);
+            border-radius: 28px;
+            padding: 56px 72px;
+            text-align: center;
+            color: #fff;
+            box-shadow: 0 12px 48px rgba(249, 115, 22, 0.3);
+        }
+        .cta-banner h2 {
+            font-size: 2rem;
+            font-family: 'Nunito 700';
+            letter-spacing: -0.3px;
+            margin-bottom: 12px;
+        }
+        .cta-banner p {
+            font-size: 1.05rem;
+            opacity: 0.9;
+            margin-bottom: 36px;
+            max-width: 460px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+        .btn-cta-white {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            background: #fff;
+            color: var(--primary-dk);
+            border: none;
+            border-radius: 14px;
+            padding: 16px 40px;
+            font-family: 'Source Sans Pro', sans-serif;
+            font-size: 1.08rem;
+            font-family: 'Nunito 700';
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            transition: transform 0.15s, box-shadow 0.18s;
+        }
+        .btn-cta-white:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+        }
+        footer {
+            border-radius: 42px 42px 0px 0px;
+            background: #272e47;
+            padding: 28px 0;
+            width: 100%;
+        }
+
+        .container {
+            width: fit-content;
+            display: flex;
+            gap: 16px;
+            margin: 0 auto;
+        }
+
+        footer a {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            font-family: 'Nunito 400';
+            line-height: 20px;
+            transition: all 0.1s;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: #ed6b2f;
+        }
+    </style>
+</head>
+<body class="alta">
+<header>
+    <a href="https://1clickvpn.net/" class="logo"></a>
+</header>
+
+<div class="page-wrap">
+    <div class="promo-card">
+        <div class="shield-wrap">
+            <span class="shield-icon">🛡️</span>
+        </div>
+
+        <div class="status-badge">
+            <span class="status-dot"></span>
+            Ограничено в вашем регионе
+        </div>
+
+        <h1 class="promo-headline">
+            VPN-подключение через<br /><span>расширение браузера</span
+        ><br />ограничено в вашем регионе.
+        </h1>
+
+        <p class="promo-body">
+            Пожалуйста, используйте
+            <a href="https://altavpn.net" target="_blank" rel="noopener"
+            >альтернативный VPN</a
+            >
+            для безопасного подключения.
+        </p>
+
+        <p class="alt-label">
+            Рекомендуем
+            <a href="https://altavpn.net" target="_blank" rel="noopener"
+            >AltaVPN</a
+            >
+            — быстро, приватно, без ограничений.
+        </p>
+
+        <a
+                href="https://t.me/altavpn_bot"
+                target="_blank"
+                rel="noopener"
+                class="btn-connect"
+        >
+            <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+            >
+                <path
+                        d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                />
+            </svg>
+            Подключиться через Telegram
+        </a>
+
+        <p class="tg-note">
+            Откроет бот AltaVPN &nbsp;·&nbsp;
+            <strong>Карта не нужна</strong> &nbsp;·&nbsp; Есть пробный период
+        </p>
+
+        <div class="trust-strip">
+            <div class="trust-item">
+                <span class="ti">🔒</span> Шифрование AES-256
+            </div>
+            <div class="trust-item">
+                <span class="ti">⚡</span> Ультрабыстрые серверы
+            </div>
+            <div class="trust-item">
+                <span class="ti">👁️</span> Политика Zero-logs
+            </div>
+        </div>
+    </div>
+
+    <div class="section-wrap">
+        <div class="section-label">Почему AltaVPN</div>
+        <h2 class="section-title">Лучшие технологии в одном VPN</h2>
+        <p class="section-sub">
+            AltaVPN — современный сервис для приватного и свободного интернета.
+            Построен на передовых протоколах — быстрый, надёжный и устойчивый к
+            блокировкам.
+        </p>
+
+        <div class="features-grid">
+            <div class="feat-card">
+                <span class="feat-emoji">🔐</span>
+                <div class="feat-title">Протокол VLESS</div>
+                <div class="feat-desc">
+                    Современный протокол с устойчивостью к блокировкам и высокой
+                    скоростью — незаметен для провайдера.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">🛡️</span>
+                <div class="feat-title">Шифрование AES-256</div>
+                <div class="feat-desc">
+                    Военный уровень защиты. Ни провайдер, ни третьи стороны не видят
+                    ваш трафик.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">▶️</span>
+                <div class="feat-title">YouTube без рекламы</div>
+                <div class="feat-desc">
+                    Смотрите YouTube без рекламы и баннеров — плавное воспроизведение
+                    в любом качестве.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">🌍</span>
+                <div class="feat-title">Свобода доступа</div>
+                <div class="feat-desc">
+                    Обходите цензуру и региональные ограничения. Доступ к любым сайтам
+                    и сервисам по всему миру.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">⚡</span>
+                <div class="feat-title">Ультрабыстрая скорость</div>
+                <div class="feat-desc">
+                    Средний пинг 12 мс. Игры и стримы без лагов и троттлинга.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">💬</span>
+                <div class="feat-title">Мини-апп в Telegram</div>
+                <div class="feat-desc">
+                    Управляйте подпиской и платите Звёздами Telegram — всё прямо в
+                    мессенджере.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">📱</span>
+                <div class="feat-title">Работает везде</div>
+                <div class="feat-desc">
+                    Windows, macOS, iOS, Android — один аккаунт для нескольких
+                    устройств одновременно.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">🚫</span>
+                <div class="feat-title">Zero Logs</div>
+                <div class="feat-desc">
+                    Никаких логов активности и подключений. Ваша приватность не
+                    нарушается никогда.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">🎮</span>
+                <div class="feat-title">Для геймеров</div>
+                <div class="feat-desc">
+                    Низкий пинг и отсутствие троттлинга — VPN, который помогает, а не
+                    мешает играть.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">♾️</span>
+                <div class="feat-title">Безлимитный трафик</div>
+                <div class="feat-desc">
+                    Никаких ограничений по данным и скорости. Используйте столько,
+                    сколько нужно.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">🔁</span>
+                <div class="feat-title">Kill Switch</div>
+                <div class="feat-desc">
+                    Автоматическая защита при обрыве соединения — ваш IP остаётся
+                    скрытым в любой ситуации.
+                </div>
+            </div>
+
+            <div class="feat-card">
+                <span class="feat-emoji">🌟</span>
+                <div class="feat-title">Пробный период</div>
+                <div class="feat-desc">
+                    Попробуйте 1 день пробного периода без риска перед оформлением
+                    подписки.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-wrap">
+        <div class="section-label">FAQ</div>
+        <h2 class="section-title">Популярные вопросы</h2>
+        <p class="section-sub">Всё, что нужно знать перед подключением.</p>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary>
+                    Что такое VPN и зачем он нужен? <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    VPN (Virtual Private Network) шифрует интернет-трафик и скрывает
+                    IP-адрес. Это повышает безопасность в публичных Wi-Fi сетях,
+                    защищает приватность от провайдеров и рекламодателей, а также
+                    открывает доступ к заблокированному и геоограниченному контенту.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    Законно ли использование VPN? <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    В большинстве стран использование VPN полностью законно —
+                    технология широко применяется для защиты данных и приватности.
+                    Ознакомьтесь с законодательством вашей страны, поскольку правила
+                    могут отличаться в зависимости от региона.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    Какой VPN выбрать для стриминга (Netflix, YouTube, Disney+)?
+                    <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    Нужен быстрый VPN со стабильным обходом гео-блокировок и скоростью
+                    для HD/4K. AltaVPN оптимизирован для стриминга — средний пинг 12
+                    мс, безлимитный трафик и надёжная серверная инфраструктура, чтобы
+                    контент не буферизировался.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    Какой протокол использует AltaVPN и почему это важно?
+                    <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    AltaVPN использует VLESS — современный протокол с устойчивостью к
+                    блокировкам и высокой скоростью. В отличие от устаревших
+                    протоколов (OpenVPN, L2TP), VLESS сложнее обнаружить и
+                    заблокировать, что делает его лучшим выбором в регионах с жёсткой
+                    цензурой.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    Замедляет ли VPN интернет? <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    Любое шифрование даёт небольшой оверхед, однако протокол VLESS
+                    сводит его к минимуму. Для лучшего результата подключайтесь к
+                    ближайшему серверу. На практике большинство пользователей не
+                    замечают разницы в скорости при серфинге, стриминге и играх.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    Как начать пользоваться сервисом?
+                    <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    Откройте бот AltaVPN в Telegram:
+                    <a href="https://t.me/altavpn_bot" target="_blank"
+                    >t.me/altavpn_bot</a
+                    >, выберите план (в том числе 1-дневный пробный) и следуйте
+                    инструкциям по настройке. На десктопе выдаётся персональная ссылка
+                    подключения, на мобильных — QR-код для сканирования. Настройка
+                    занимает не более 2 минут.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    На каких устройствах работает сервис? Возможны ли одновременные
+                    подключения? <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    AltaVPN поддерживает Windows, macOS, iOS и Android. Один аккаунт
+                    можно использовать на нескольких устройствах одновременно — удобно
+                    для защиты телефона, ноутбука и планшета сразу.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    Чем отличается бесплатный VPN от платного?
+                    <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    Бесплатные VPN обычно ограничены по скорости, трафику и
+                    гео-локациям, и монетизируются рекламой или продажей данных
+                    пользователей. Платные сервисы, такие как AltaVPN, предлагают
+                    безлимитный трафик, премиальные серверы, политику zero-logs и
+                    отсутствие рекламы — настоящая приватность без компромиссов.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    Есть ли пробный период? <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    Да. AltaVPN предлагает 1-дневный пробный период — оцените
+                    скорость, удобство и совместимость с вашими устройствами перед
+                    оформлением подписки.
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary>
+                    Что делать, если VPN не работает?
+                    <span class="faq-chevron">▾</span>
+                </summary>
+                <div class="faq-body">
+                    Перенастройте клиент: на десктопе заново вставьте ссылку
+                    подключения, на мобильных — пересканируйте QR-код в боте. Если
+                    проблема сохраняется, обратитесь в поддержку через Telegram-бот —
+                    команда всегда на связи и готова помочь.
+                </div>
+            </details>
+        </div>
+    </div>
+
+    <div class="cta-banner">
+        <h2>Ищете надёжный VPN для стабильного соединения?</h2>
+        <p>
+            AltaVPN — быстро, приватно, без ограничений. Начните 1 дневный пробный
+            период.
+        </p>
+        <a
+                href="https://t.me/altavpn_bot"
+                target="_blank"
+                rel="noopener"
+                class="btn-cta-white"
+        >
+            <svg
+                    width="17"
+                    height="17"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+            >
+                <path
+                        d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                />
+            </svg>
+            Подключиться через Telegram-бот
+        </a>
+    </div>
+</div>
+
+<footer>
+    <div class="container">
+        <a href="https://1clickvpn.net/terms-of-service">Terms of Use</a>
+        <a href="https://1clickvpn.net/privacy">Privacy Policy</a>
+        <a href="https://1clickvpn.net/contact">Contact Us</a>
+    </div>
+</footer>
+</body>
+</html>

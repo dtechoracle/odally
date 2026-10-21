@@ -1,0 +1,15 @@
+#vmaker-extension-root{
+    width: 100%;
+    height: 100%;
+    position: fixed;
+    top: 0px;
+    right: 0px;
+    z-index: 2147483647;
+    background: transparent;
+}
+  
+#vmaker-extension-root iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
