@@ -47,12 +47,28 @@ export async function POST(request: Request) {
     const userId = user.id;
 
     const body = await request.json();
-    const { title, meetUrl, scheduledAt, timezone, videoId, settings } = body;
+    const {
+      title,
+      meetUrl,
+      scheduledAt,
+      timezone,
+      videoId,
+      settings,
+      materialType,
+      documentUrl,
+      documentName,
+      talkingPoints,
+      introMessage,
+      keywordAlerts,
+    } = body;
 
     let cleanMeetUrl = meetUrl?.trim() || "";
     if (cleanMeetUrl && !/^https?:\/\//i.test(cleanMeetUrl)) {
       cleanMeetUrl = `https://${cleanMeetUrl}`;
     }
+
+    // Default polite introduction if not provided
+    const defaultIntro = `Hi everyone! I'm Odally here on behalf of ${user.name || "the presenter"}. I'll be sharing their material and taking notes for them today.`;
 
     const meeting = await prisma.scheduledMeeting.create({
       data: {
@@ -61,10 +77,16 @@ export async function POST(request: Request) {
         meetUrl: cleanMeetUrl,
         scheduledAt: new Date(scheduledAt),
         timezone,
-        videoId,
-        settings,
-        status: "scheduled"
-      }
+        videoId: videoId || null,
+        materialType: materialType || (videoId ? "video" : "notes"),
+        documentUrl: documentUrl || null,
+        documentName: documentName || null,
+        talkingPoints: talkingPoints || null,
+        introMessage: introMessage || defaultIntro,
+        keywordAlerts: keywordAlerts || user.name || null,
+        settings: settings || {},
+        status: "scheduled",
+      },
     });
 
     // Fire the Inngest background job — it will sleep until meeting time then launch the bot

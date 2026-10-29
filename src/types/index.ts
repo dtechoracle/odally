@@ -41,6 +41,16 @@ export interface ScheduledMeeting {
   settings: MeetingSettings;
   videoTitle?: string;
   videoDuration?: string;
+  materialType?: "video" | "document" | "notes" | "none";
+  documentUrl?: string | null;
+  documentName?: string | null;
+  talkingPoints?: string | null;
+  introMessage?: string | null;
+  keywordAlerts?: string | null;
+  summary?: string | null;
+  mentions?: string | null;
+  attendeeQuestions?: string | null;
+  followUpDraft?: string | null;
   createdAt: string;
   updatedAt: string;
 }

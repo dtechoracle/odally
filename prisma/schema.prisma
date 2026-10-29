@@ -82,6 +82,20 @@ model ScheduledMeeting {
   videoId     String?
   status      String   @default("scheduled")
 
+  // Material & Instructions fed to the AI
+  materialType      String?  @default("video") // "video" | "document" | "notes" | "none"
+  documentUrl       String?
+  documentName      String?
+  talkingPoints     String?  @db.Text
+  introMessage      String?  @db.Text
+  keywordAlerts     String?  // comma-separated names/keywords to watch for
+
+  // Post-meeting intelligence
+  summary           String?  @db.Text
+  mentions          String?  @db.Text
+  attendeeQuestions String?  @db.Text
+  followUpDraft     String?  @db.Text
+
   // Settings stored as JSON to avoid excessive columns
   settings Json
 

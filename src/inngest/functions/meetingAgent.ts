@@ -85,10 +85,12 @@ export const runMeetingAgent = inngest.createFunction(
     });
 
     const videoUrl = await step.run("generate-video-url", async () => {
-      if (!meeting.video) throw new Error("No video attached to this meeting.");
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-      const token = process.env.WORKER_SECRET || "dev-secret-key";
-      return `${appUrl}/api/videos/${meeting.video.id}/stream?token=${token}`;
+      if (meeting.materialType === "video" && meeting.video) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        const token = process.env.WORKER_SECRET || "dev-secret-key";
+        return `${appUrl}/api/videos/${meeting.video.id}/stream?token=${token}`;
+      }
+      return null;
     });
 
     const jobId = await step.run("launch-worker", async () => {
@@ -108,6 +110,11 @@ export const runMeetingAgent = inngest.createFunction(
           accessToken,
           refreshToken,
           scheduledAt: meeting.scheduledAt,
+          agentConfig: {
+            introMessage:
+              meeting.introMessage ||
+              "Hi everyone. I'm joining on behalf of the presenter. The session will begin shortly.",
+          },
         }),
       });
 
@@ -149,6 +156,25 @@ export const runMeetingAgent = inngest.createFunction(
           });
           await logEvent(meetingId, status, status === "failed" ? "error" : "info", `Meeting ${status}`);
         });
+
+        if (status === "completed") {
+          await step.run("auto-generate-summary", async () => {
+            try {
+              const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+              const workerSecret = process.env.WORKER_SECRET || "dev-secret-key";
+              await fetch(`${appUrl}/api/meetings/${meetingId}/generate-summary`, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${workerSecret}`,
+                  "Content-Type": "application/json",
+                },
+              });
+            } catch (err) {
+              console.warn(`[Inngest] Auto summary generation non-fatal error for ${meetingId}:`, err);
+            }
+          });
+        }
+
         return { success: status === "completed" };
       }
     }

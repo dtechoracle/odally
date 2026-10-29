@@ -1,20 +1,32 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Calendar, Video as VideoIcon, X, ChevronDown, ChevronUp, Check, Clock, Loader2 } from "lucide-react";
+import {
+  Calendar,
+  Video as VideoIcon,
+  FileText,
+  Upload,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Sparkles,
+  MessageSquare,
+  AlertCircle,
+  X,
+  File,
+  Eye,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogHeader } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { getVideoById, getAllVideos, getGoogleSession, createMeeting, createNotification } from "@/lib/db";
-import { format, parseISO, isToday, isTomorrow, isPast } from "date-fns";
+import { format } from "date-fns";
 
 const timezones = [
   "Africa/Lagos", "Africa/Cairo", "Africa/Johannesburg",
@@ -36,10 +48,9 @@ const playModes = [
 ];
 
 const leaveOptions = [
-  { value: "video_ends", label: "After video ends" },
+  { value: "video_ends", label: "After presentation ends" },
   { value: "specified_duration", label: "Specified duration" },
   { value: "manual", label: "Manual" },
-  { value: "custom", label: "Custom" },
 ];
 
 function ScheduleMeetingContent() {
@@ -47,26 +58,25 @@ function ScheduleMeetingContent() {
   const searchParams = useSearchParams();
   const dateFromQuery = searchParams.get("date") || "";
   const timeFromQuery = searchParams.get("time") || "";
-  
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [videos, setVideos] = useState<any[]>([]);
   const [step, setStep] = useState(1);
-  const [isOpen, setIsOpen] = useState(true);
   const [minDate, setMinDate] = useState("");
   const [selectedDate, setSelectedDate] = useState<string>(dateFromQuery);
   const [selectedTime, setSelectedTime] = useState<string>(timeFromQuery);
-  const [selectedVideo, setSelectedVideo] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/videos").then(r => r.json()).then(d => setVideos(d.videos || []));
-    setMinDate(new Date().toISOString().split("T")[0]);
-    if (dateFromQuery) {
-      setSelectedDate(dateFromQuery);
-    }
-    if (timeFromQuery) {
-      setSelectedTime(timeFromQuery);
-    }
-  }, [dateFromQuery, timeFromQuery]);
+  // Materials & Instructions fed to the agent
+  const [materialType, setMaterialType] = useState<"document" | "video" | "notes" | "none">("document");
+  const [selectedVideo, setSelectedVideo] = useState<string>("");
+  const [uploadedDoc, setUploadedDoc] = useState<{ filename: string; url: string; size: number } | null>(null);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [talkingPoints, setTalkingPoints] = useState<string>("");
+  const [introMessage, setIntroMessage] = useState<string>(
+    "Hi everyone! I'm Odally attending on behalf of the presenter. I'll be sharing their material and taking notes for them today."
+  );
+  const [keywordAlerts, setKeywordAlerts] = useState<string>("");
 
   const [form, setForm] = useState({
     title: "",
@@ -76,7 +86,7 @@ function ScheduleMeetingContent() {
 
   const [settings, setSettings] = useState({
     cameraEnabled: false,
-    microphoneEnabled: false,
+    microphoneEnabled: true,
     presentationEnabled: true,
     playMode: "once" as const,
     joinBehavior: "immediately" as const,
@@ -87,12 +97,51 @@ function ScheduleMeetingContent() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    fetch("/api/videos")
+      .then((r) => (r.ok ? r.json() : { videos: [] }))
+      .then((d) => setVideos(d.videos || []))
+      .catch(() => {});
+    setMinDate(new Date().toISOString().split("T")[0]);
+    if (dateFromQuery) setSelectedDate(dateFromQuery);
+    if (timeFromQuery) setSelectedTime(timeFromQuery);
+  }, [dateFromQuery, timeFromQuery]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingDoc(true);
+    try {
+      const res = await fetch(
+        `/api/documents/upload?filename=${encodeURIComponent(file.name)}&mimeType=${encodeURIComponent(file.type)}`,
+        {
+          method: "POST",
+          body: file,
+        }
+      );
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      setUploadedDoc({
+        filename: data.document.filename,
+        url: data.document.url,
+        size: data.document.size,
+      });
+      if (data.document.extractedText && !talkingPoints) {
+        setTalkingPoints(data.document.extractedText.slice(0, 1000));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to upload document");
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!form.title.trim()) newErrors.title = "Meeting name is required";
-    if (!form.meetUrl.trim()) {
-      newErrors.meetUrl = "Google Meet URL is required";
-    }
+    if (!form.meetUrl.trim()) newErrors.meetUrl = "Google Meet URL is required";
     if (!selectedDate) newErrors.date = "Date is required";
     if (!selectedTime) newErrors.time = "Time is required";
     setErrors(newErrors);
@@ -112,17 +161,18 @@ function ScheduleMeetingContent() {
           meetUrl: form.meetUrl,
           scheduledAt: new Date(`${selectedDate}T${selectedTime}:00`).toISOString(),
           timezone: form.timezone,
-          videoId: selectedVideo || null,
+          videoId: materialType === "video" ? selectedVideo || null : null,
+          materialType,
+          documentUrl: uploadedDoc?.url || null,
+          documentName: uploadedDoc?.filename || null,
+          talkingPoints: talkingPoints.trim() || null,
+          introMessage: introMessage.trim() || null,
+          keywordAlerts: keywordAlerts.trim() || null,
           settings,
-        })
+        }),
       });
 
       if (!res.ok) throw new Error("Failed to schedule");
-      setForm({ title: "", meetUrl: "", timezone: "UTC" });
-      setSelectedDate("");
-      setSelectedTime("");
-      setSelectedVideo("");
-      setStep(1);
       router.refresh();
       router.push(`/dashboard`);
     } catch (error) {
@@ -134,295 +184,438 @@ function ScheduleMeetingContent() {
 
   const steps = [
     { label: "Meeting Info", icon: Calendar },
-    { label: "Video", icon: VideoIcon },
+    { label: "Feed Material", icon: FileText },
     { label: "Review", icon: Check },
   ];
 
-  useEffect(() => {
-    setMinDate(new Date().toISOString().split("T")[0]);
-  }, []);
-
   return (
     <DashboardShell>
-      <div className="space-y-6">
+      <div className="space-y-6 max-w-3xl mx-auto pb-16">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-slate-900">Schedule Meeting</h1>
-          <p className="text-sm text-slate-500 mt-1">Configure your Odally agent details.</p>
+          <p className="text-sm text-slate-500 mt-1">Configure your Odally agent details and meeting materials.</p>
         </div>
 
-      {/* Step indicator */}
-      <div className="flex items-center justify-center gap-4 mb-8">
-        {steps.map((s, i) => (
-          <div key={s.label} className="flex items-center gap-2">
-            <div className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold",
-              step >= i + 1 ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400"
-            )}>
-              {step > i + 1 ? <Check className="h-4 w-4" /> : <s.icon className="h-4 w-4" />}
-            </div>
-            <span className={cn("text-xs font-medium hidden sm:inline", step >= i + 1 ? "text-slate-900" : "text-slate-400")}>
-              {s.label}
-            </span>
-            {i < steps.length - 1 && <div className="w-8 h-px bg-slate-200" />}
-          </div>
-        ))}
-      </div>
-
-      <Card className="border-slate-200/60">
-        <CardContent className="pt-6 space-y-6">
-          {/* Step 1: Meeting Info */}
-          {step === 1 && (
-            <div className="space-y-5 animate-slide-up">
-              <h2 className="text-lg font-semibold text-slate-900">Meeting Details</h2>
-
-              <div className="space-y-2">
-                <Label htmlFor="title">Meeting name</Label>
-                <Input
-                  id="title"
-                  placeholder="Product Demo"
-                  value={form.title}
-                  onChange={(e) => { setForm({ ...form, title: e.target.value }); setErrors({ ...errors, title: "" }); }}
-                  className={errors.title ? "border-red-300 focus:ring-red-500" : ""}
-                />
-                {errors.title && <p className="text-xs text-red-500">{errors.title}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="meetUrl">Google Meet URL</Label>
-                <Input
-                  id="meetUrl"
-                  placeholder="https://meet.google.com/abc-defg-hij"
-                  value={form.meetUrl}
-                  onChange={(e) => { setForm({ ...form, meetUrl: e.target.value }); setErrors({ ...errors, meetUrl: "" }); }}
-                  className={errors.meetUrl ? "border-red-300 focus:ring-red-500" : ""}
-                />
-                {errors.meetUrl ? (
-                  <p className="text-xs text-red-500">{errors.meetUrl}</p>
-                ) : (
-                  <p className="text-xs text-slate-400">Enter a valid Google Meet link</p>
+        {/* Step Indicator */}
+        <div className="flex items-center justify-center gap-4 mb-8">
+          {steps.map((s, i) => (
+            <div key={s.label} className="flex items-center gap-2">
+              <div
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all",
+                  step >= i + 1 ? "bg-sky-500 text-white shadow-xs" : "bg-slate-100 text-slate-400"
                 )}
+              >
+                {step > i + 1 ? <Check className="h-4 w-4" /> : <s.icon className="h-4 w-4" />}
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Date</Label>
-                  <Input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => { setSelectedDate(e.target.value); setErrors({ ...errors, date: "" }); }}
-                    min={minDate}
-                    className={errors.date ? "border-red-300 focus:ring-red-500" : ""}
-                  />
-                  {errors.date && <p className="text-xs text-red-500">{errors.date}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label>Start time</Label>
-                  <Input
-                    type="time"
-                    value={selectedTime}
-                    onChange={(e) => { setSelectedTime(e.target.value); setErrors({ ...errors, time: "" }); }}
-                    className={errors.time ? "border-red-300 focus:ring-red-500" : ""}
-                  />
-                  {errors.time && <p className="text-xs text-red-500">{errors.time}</p>}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Time zone</Label>
-                <Select value={form.timezone} onValueChange={(v) => setForm({ ...form, timezone: v })}>
-                  <SelectTrigger id="timezone">
-                    <SelectValue placeholder="Select timezone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {timezones.map((tz) => (
-                      <SelectItem key={tz} value={tz}>{tz}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-slate-400">Detected: Africa/Lagos</p>
-              </div>
+              <span className={cn("text-xs font-semibold hidden sm:inline", step >= i + 1 ? "text-slate-900" : "text-slate-400")}>
+                {s.label}
+              </span>
+              {i < steps.length - 1 && <div className="w-8 h-px bg-slate-200" />}
             </div>
-          )}
+          ))}
+        </div>
 
-          {/* Step 2: Video */}
-          {step === 2 && (
-            <div className="space-y-5 animate-slide-up">
-              <h2 className="text-lg font-semibold text-slate-900">Select Video</h2>
-
-              {videos.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-lg">
-                  <VideoIcon className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500">No videos available. Upload one first.</p>
-                  <Button size="sm" variant="outline" className="mt-3" onClick={() => router.push("/dashboard/videos")}>
-                    Go to Videos
-                  </Button>
+        <Card className="border-slate-200/80 shadow-sm rounded-2xl overflow-hidden bg-white">
+          <CardContent className="p-6 sm:p-8 space-y-6">
+            
+            {/* STEP 1: MEETING DETAILS & ANNOUNCEMENTS */}
+            {step === 1 && (
+              <div className="space-y-5 animate-slide-up">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Meeting Details</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Where and when should your agent attend?</p>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {videos.map((video) => (
-                    <button
-                      key={video.id}
-                      onClick={() => setSelectedVideo(video.id)}
-                      className={cn(
-                        "flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all hover:border-sky-200",
-                        selectedVideo === video.id ? "border-sky-400 bg-sky-50/50" : "border-slate-200"
+
+                <div className="space-y-2">
+                  <Label htmlFor="title" className="text-xs font-semibold text-slate-700">Meeting name</Label>
+                  <Input
+                    id="title"
+                    placeholder="Product Demo, Sprint Sync, Client Pitch..."
+                    value={form.title}
+                    onChange={(e) => {
+                      setForm({ ...form, title: e.target.value });
+                      setErrors({ ...errors, title: "" });
+                    }}
+                    className={cn("h-10", errors.title && "border-red-300 focus:ring-red-500")}
+                  />
+                  {errors.title && <p className="text-xs text-red-500">{errors.title}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="meetUrl" className="text-xs font-semibold text-slate-700">Google Meet URL</Label>
+                  <Input
+                    id="meetUrl"
+                    placeholder="https://meet.google.com/abc-defg-hij"
+                    value={form.meetUrl}
+                    onChange={(e) => {
+                      setForm({ ...form, meetUrl: e.target.value });
+                      setErrors({ ...errors, meetUrl: "" });
+                    }}
+                    className={cn("h-10", errors.meetUrl && "border-red-300 focus:ring-red-500")}
+                  />
+                  {errors.meetUrl ? (
+                    <p className="text-xs text-red-500">{errors.meetUrl}</p>
+                  ) : (
+                    <p className="text-xs text-slate-400">Enter a valid Google Meet link</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700">Date</Label>
+                    <Input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                        setErrors({ ...errors, date: "" });
+                      }}
+                      min={minDate}
+                      className={cn("h-10", errors.date && "border-red-300 focus:ring-red-500")}
+                    />
+                    {errors.date && <p className="text-xs text-red-500">{errors.date}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700">Start time</Label>
+                    <Input
+                      type="time"
+                      value={selectedTime}
+                      onChange={(e) => {
+                        setSelectedTime(e.target.value);
+                        setErrors({ ...errors, time: "" });
+                      }}
+                      className={cn("h-10", errors.time && "border-red-300 focus:ring-red-500")}
+                    />
+                    {errors.time && <p className="text-xs text-red-500">{errors.time}</p>}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="timezone" className="text-xs font-semibold text-slate-700">Time zone</Label>
+                  <Select value={form.timezone} onValueChange={(v) => setForm({ ...form, timezone: v })}>
+                    <SelectTrigger id="timezone" className="h-10">
+                      <SelectValue placeholder="Select timezone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timezones.map((tz) => (
+                        <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Announcement & Name Watcher Box */}
+                <div className="pt-4 border-t border-slate-100 space-y-4">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="introMessage" className="text-xs font-semibold text-slate-700">
+                        Polite Greeting Spoken by Agent
+                      </Label>
+                      <Sparkles className="h-3.5 w-3.5 text-sky-500" />
+                    </div>
+                    <Input
+                      id="introMessage"
+                      value={introMessage}
+                      onChange={(e) => setIntroMessage(e.target.value)}
+                      placeholder="Hi everyone! I'm Odally here on behalf of..."
+                      className="h-10 text-xs text-slate-800"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      The agent greets the call upon joining so attendees know you sent a surrogate.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="keywordAlerts" className="text-xs font-semibold text-slate-700">
+                      Watch for Mentions of Your Name
+                    </Label>
+                    <Input
+                      id="keywordAlerts"
+                      value={keywordAlerts}
+                      onChange={(e) => setKeywordAlerts(e.target.value)}
+                      placeholder="e.g. Ezekiel, Marketing Budget, Project Launch"
+                      className="h-10 text-xs text-slate-800"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      You'll get an instant alert if anyone in the room asks about you or these topics.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: FEED MATERIALS & INSTRUCTIONS TO THE AGENT */}
+            {step === 2 && (
+              <div className="space-y-6 animate-slide-up">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Feed Materials to the Agent</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    What documents, presentation, or talking points should the agent use?
+                  </p>
+                </div>
+
+                {/* Material Mode Selector Tabs */}
+                <div className="grid grid-cols-3 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={() => setMaterialType("document")}
+                    className={cn(
+                      "py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                      materialType === "document"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    <FileText className="h-3.5 w-3.5 text-sky-500" />
+                    <span>Document & Notes</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMaterialType("video")}
+                    className={cn(
+                      "py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                      materialType === "video"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    <VideoIcon className="h-3.5 w-3.5 text-sky-500" />
+                    <span>Video Pitch</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMaterialType("none")}
+                    className={cn(
+                      "py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                      materialType === "none"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Silent Attendee</span>
+                  </button>
+                </div>
+
+                {/* TAB 1: DOCUMENT & TALKING POINTS */}
+                {materialType === "document" && (
+                  <div className="space-y-4">
+                    {/* Document Upload Area */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-slate-700">Attach Document / Deck</Label>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                        accept=".pdf,.docx,.doc,.txt,.md,.pptx"
+                        className="hidden"
+                      />
+
+                      {uploadedDoc ? (
+                        <div className="flex items-center justify-between p-3.5 rounded-xl border border-sky-300 bg-sky-50/50">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-sky-100 flex items-center justify-center text-sky-600 font-bold">
+                              <File className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">{uploadedDoc.filename}</p>
+                              <p className="text-[11px] text-slate-500">{(uploadedDoc.size / 1024).toFixed(1)} KB • Ready for Agent</p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setUploadedDoc(null)}
+                            className="h-8 text-xs text-red-500 hover:bg-red-50"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => fileInputRef.current?.click()}
+                          className="border-2 border-dashed border-slate-200 hover:border-sky-400 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-50/50 hover:bg-sky-50/20"
+                        >
+                          <Upload className="h-6 w-6 text-slate-400 mx-auto mb-2" />
+                          <p className="text-xs font-semibold text-slate-800">
+                            {isUploadingDoc ? "Uploading document..." : "Click to upload a document for your agent"}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Supports PDF, DOCX, TXT, PPTX (up to 25MB)</p>
+                        </div>
                       )}
-                    >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                        <VideoIcon className="h-5 w-5 text-slate-500" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900">{video.title}</p>
-                        <p className="text-xs text-slate-500">{video.durationFormatted} • {video.width}×{video.height} • {video.mimeType}</p>
-                      </div>
-                      {selectedVideo === video.id && <Check className="h-5 w-5 text-sky-500" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    </div>
 
-          {/* Step 3: Review + Advanced Options */}
-          {step === 3 && (
-            <div className="space-y-5 animate-slide-up">
-              {/* Advanced Options */}
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <span>Advanced Options</span>
-                  {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
-                {showAdvanced && (
-                  <div className="px-4 pb-4 space-y-4 border-t border-slate-100 pt-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Talking Points & Instructions */}
+                    <div className="space-y-2 pt-2">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">Camera</p>
-                          <p className="text-xs text-slate-500">Default: OFF</p>
-                        </div>
-                        <input type="checkbox" checked={settings.cameraEnabled} onChange={(e) => setSettings({ ...settings, cameraEnabled: e.target.checked })} className="h-4 w-4 text-sky-500 rounded" />
+                        <Label htmlFor="talkingPoints" className="text-xs font-semibold text-slate-700">
+                          Talking Points & Agenda Instructions
+                        </Label>
+                        <span className="text-[11px] text-slate-400">Fed directly to the AI</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">Microphone</p>
-                          <p className="text-xs text-slate-500">Default: OFF</p>
-                        </div>
-                        <input type="checkbox" checked={settings.microphoneEnabled} onChange={(e) => setSettings({ ...settings, microphoneEnabled: e.target.checked })} className="h-4 w-4 text-sky-500 rounded" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Join behavior</Label>
-                      <Select value={settings.joinBehavior} onValueChange={(v) => setSettings({ ...settings, joinBehavior: v as any })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="immediately">Join immediately</SelectItem>
-                          <SelectItem value="wait_host">Wait for host</SelectItem>
-                          <SelectItem value="wait_admitted">Wait until admitted</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Presentation mode</Label>
-                      <Select value={settings.presentationMode} onValueChange={(v) => setSettings({ ...settings, presentationMode: v as any })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {presentationModes.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Video behavior</Label>
-                      <Select value={settings.playMode} onValueChange={(v) => setSettings({ ...settings, playMode: v as any })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {playModes.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Leave meeting after</Label>
-                      <Select value={settings.leaveAfterVideo ? "video_ends" : "manual"} onValueChange={(v) => setSettings({ ...settings, leaveAfterVideo: v === "video_ends" })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {leaveOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <Textarea
+                        id="talkingPoints"
+                        rows={4}
+                        placeholder="e.g. Present the Q3 revenue update, explain that we're opening hiring next month, and tell Sarah that the design files are ready."
+                        value={talkingPoints}
+                        onChange={(e) => setTalkingPoints(e.target.value)}
+                        className="text-xs leading-relaxed"
+                      />
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Review */}
-              <h2 className="text-lg font-semibold text-slate-900">Review Meeting</h2>
-              <div className="rounded-lg border border-slate-200 overflow-hidden">
-                <div className="divide-y divide-slate-100">
+                {/* TAB 2: VIDEO PRESENTATION */}
+                {materialType === "video" && (
+                  <div className="space-y-3">
+                    <Label className="text-xs font-semibold text-slate-700">Select Presentation Video</Label>
+                    {videos.length === 0 ? (
+                      <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                        <VideoIcon className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-xs text-slate-500">No videos available in your library.</p>
+                        <Button size="sm" variant="outline" className="mt-3 text-xs" onClick={() => router.push("/dashboard/videos")}>
+                          Go to Videos Upload
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                        {videos.map((video) => (
+                          <button
+                            key={video.id}
+                            type="button"
+                            onClick={() => setSelectedVideo(video.id)}
+                            className={cn(
+                              "flex w-full items-center gap-3.5 rounded-xl border p-3.5 text-left transition-all",
+                              selectedVideo === video.id ? "border-sky-500 bg-sky-50/50 shadow-2xs" : "border-slate-200 hover:border-slate-300 bg-white"
+                            )}
+                          >
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600 font-bold text-xs">
+                              MP4
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-900 truncate">{video.title}</p>
+                              <p className="text-[11px] text-slate-500">{video.durationFormatted} • 1080p</p>
+                            </div>
+                            {selectedVideo === video.id && <Check className="h-4 w-4 text-sky-600 shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 3: SILENT ATTENDEE */}
+                {materialType === "none" && (
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-center space-y-2">
+                    <p className="text-xs font-bold text-slate-800">Silent Attendance Mode</p>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                      Your agent will join without playing media, speak the polite greeting, take meeting notes, and alert you if your name or keywords are called.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP 3: REVIEW & CONFIRM */}
+            {step === 3 && (
+              <div className="space-y-5 animate-slide-up">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Review Meeting Brief</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Confirm the instructions fed to your agent.</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 overflow-hidden divide-y divide-slate-100 bg-slate-50/40 text-xs">
                   <div className="flex px-4 py-3">
-                    <span className="w-32 text-xs font-medium text-slate-500">Meeting</span>
-                    <span className="text-sm text-slate-900">{form.title || "—"}</span>
+                    <span className="w-32 font-semibold text-slate-500 uppercase tracking-wider">Meeting</span>
+                    <span className="font-semibold text-slate-900">{form.title}</span>
                   </div>
                   <div className="flex px-4 py-3">
-                    <span className="w-32 text-xs font-medium text-slate-500">Date</span>
-                    <span className="text-sm text-slate-900">{selectedDate ? format(new Date(`${selectedDate}T00:00:00`), "MMMM d, yyyy") : "—"}</span>
-                  </div>
-                  <div className="flex px-4 py-3">
-                    <span className="w-32 text-xs font-medium text-slate-500">Time</span>
-                    <span className="text-sm text-slate-900">{selectedTime || "—"}</span>
-                  </div>
-                  <div className="flex px-4 py-3">
-                    <span className="w-32 text-xs font-medium text-slate-500">Timezone</span>
-                    <span className="text-sm text-slate-900">{form.timezone}</span>
-                  </div>
-                  <div className="flex px-4 py-3">
-                    <span className="w-32 text-xs font-medium text-slate-500">Google Meet</span>
-                    <span className="text-sm text-sky-600 truncate">{form.meetUrl || "—"}</span>
-                  </div>
-                  <div className="flex px-4 py-3">
-                    <span className="w-32 text-xs font-medium text-slate-500">Video</span>
-                    <span className="text-sm text-slate-900">
-                      {selectedVideo ? videos.find((v) => v.id === selectedVideo)?.title || "—" : "—"}
+                    <span className="w-32 font-semibold text-slate-500 uppercase tracking-wider">Date & Time</span>
+                    <span className="font-semibold text-slate-900">
+                      {selectedDate} at {selectedTime} ({form.timezone})
                     </span>
                   </div>
                   <div className="flex px-4 py-3">
-                    <span className="w-32 text-xs font-medium text-slate-500">Presentation</span>
-                    <span className="text-sm text-slate-900">{settings.presentationEnabled ? "Enabled" : "Disabled"}</span>
+                    <span className="w-32 font-semibold text-slate-500 uppercase tracking-wider">Google Meet</span>
+                    <span className="text-sky-600 truncate">{form.meetUrl}</span>
+                  </div>
+                  <div className="flex px-4 py-3">
+                    <span className="w-32 font-semibold text-slate-500 uppercase tracking-wider">Material Mode</span>
+                    <span className="font-semibold text-slate-900 capitalize">{materialType}</span>
+                  </div>
+                  {uploadedDoc && (
+                    <div className="flex px-4 py-3">
+                      <span className="w-32 font-semibold text-slate-500 uppercase tracking-wider">Attached Doc</span>
+                      <span className="font-semibold text-slate-900">{uploadedDoc.filename}</span>
+                    </div>
+                  )}
+                  {selectedVideo && (
+                    <div className="flex px-4 py-3">
+                      <span className="w-32 font-semibold text-slate-500 uppercase tracking-wider">Video</span>
+                      <span className="font-semibold text-slate-900">
+                        {videos.find((v) => v.id === selectedVideo)?.title || "Selected video"}
+                      </span>
+                    </div>
+                  )}
+                  {talkingPoints && (
+                    <div className="flex px-4 py-3">
+                      <span className="w-32 font-semibold text-slate-500 uppercase tracking-wider">Talking Points</span>
+                      <span className="text-slate-800 line-clamp-2">{talkingPoints}</span>
+                    </div>
+                  )}
+                  <div className="flex px-4 py-3">
+                    <span className="w-32 font-semibold text-slate-500 uppercase tracking-wider">Announcement</span>
+                    <span className="text-slate-800 italic line-clamp-2">"{introMessage}"</span>
                   </div>
                 </div>
-              </div>
 
-              {/* Timezone verification warning */}
-              <div className="rounded-lg bg-sky-50 border border-sky-100 p-4">
-                <p className="text-sm font-medium text-sky-900">Timezone verification</p>
-                <p className="text-xs text-sky-700 mt-1">
-                  Your agent will join at {selectedTime || "—"} in {form.timezone}. Please verify this is correct to avoid scheduling conflicts.
-                </p>
+                <div className="rounded-xl bg-sky-50 border border-sky-200/80 p-4">
+                  <p className="text-xs font-semibold text-sky-900">Live Agent Stand-in</p>
+                  <p className="text-[11px] text-sky-700 mt-1 leading-relaxed">
+                    At the scheduled time, your agent will enter Google Meet, speak the polite introduction, present your material, track discussions, and email you the summary upon completion.
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Navigation */}
-          <div className="flex items-center justify-between pt-4">
-            <Button variant="outline" onClick={() => setStep(Math.max(1, step - 1))} disabled={step === 1}>
-              Back
-            </Button>
-            {step < 3 ? (
-              <Button onClick={() => setStep(step + 1)} className="bg-sky-500 hover:bg-sky-600">
-                Next
-              </Button>
-            ) : (
-              <Button onClick={handleSchedule} className="bg-sky-500 hover:bg-sky-600">
-                Schedule Meeting
-              </Button>
             )}
-          </div>
-        </CardContent>
-      </Card>
+
+            {/* Step Navigation Controls */}
+            <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+              {step > 1 ? (
+                <Button variant="outline" size="sm" onClick={() => setStep(step - 1)} className="h-9 px-4 text-xs font-semibold">
+                  Back
+                </Button>
+              ) : (
+                <div />
+              )}
+
+              {step < 3 ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (step === 1 && !validate()) return;
+                    setStep(step + 1);
+                  }}
+                  className="h-9 px-6 text-xs font-semibold bg-black hover:bg-slate-800 text-white"
+                >
+                  Continue
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={handleSchedule}
+                  disabled={isSubmitting}
+                  className="h-9 px-6 text-xs font-semibold bg-[#38c6ec] hover:bg-[#2db5da] text-slate-950 font-bold"
+                >
+                  {isSubmitting ? "Scheduling Agent..." : "Confirm & Schedule Agent"}
+                </Button>
+              )}
+            </div>
+
+          </CardContent>
+        </Card>
       </div>
     </DashboardShell>
   );
@@ -430,7 +623,7 @@ function ScheduleMeetingContent() {
 
 export default function ScheduleMeetingPage() {
   return (
-    <Suspense fallback={<DashboardShell><div className="min-h-[400px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-sky-500" /></div></DashboardShell>}>
+    <Suspense fallback={<DashboardShell><div className="flex items-center justify-center min-h-[40vh]"><p className="text-sm text-slate-500">Loading scheduler...</p></div></DashboardShell>}>
       <ScheduleMeetingContent />
     </Suspense>
   );
