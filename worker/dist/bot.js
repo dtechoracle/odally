@@ -43,7 +43,8 @@ playwright_extra_1.chromium.use((0, puppeteer_extra_plugin_stealth_1.default)())
 const index_1 = require("./index");
 const fs = __importStar(require("fs"));
 async function runMeetingBot(options) {
-    const { meetingId, meetUrl, videoUrl, accessToken } = options;
+    const { meetingId, meetUrl, videoUrl, accessToken, agentConfig = {} } = options;
+    const { introMessage = "Hi everyone. I'm Odally, joining on behalf of the presenter. Feel free to ask questions in the chat.", keywordAlerts = "", talkingPoints = "", appUrl = process.env.APP_URL || "http://localhost:3000", workerSecret = process.env.WORKER_SECRET || "dev-secret-key", maxMeetingMinutes = 90, emptyRoomChecksBeforeLeave = 2, } = agentConfig;
     (0, index_1.updateJobStatus)(meetingId, "joining");
     console.log(`[Bot ${meetingId}] Launching browser...`);
     const contextOptions = {
@@ -229,6 +230,26 @@ async function runMeetingBot(options) {
             // 2. Find and click whichever join button is ready (Join now or Ask to join)
             const joinBtn = page.locator('button:has-text("Join now"), button:has-text("Ask to join"), [role="button"]:has-text("Join now"), [role="button"]:has-text("Ask to join")').first();
             console.log(`[Bot ${meetingId}] Waiting for Join button...`);
+            // If no video attached, turn off camera to prevent the green circle / pacman pattern
+            if (!videoUrl) {
+                console.log(`[Bot ${meetingId}] No presentation video attached. Disabling camera before join...`);
+                const camBtn = page.locator('button[aria-label*="Turn off camera" i], [data-is-muted="false"][aria-label*="camera" i]').first();
+                if (await camBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    await camBtn.click().catch(() => { });
+                }
+                else {
+                    await page.keyboard.press("Control+e").catch(() => { });
+                }
+            }
+            // Check microphone: unmute so speaking works
+            const micBtn = page.locator('button[aria-label*="Turn on microphone" i], [data-is-muted="true"][aria-label*="microphone" i]').first();
+            if (await micBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                console.log(`[Bot ${meetingId}] Unmuting microphone before join...`);
+                await micBtn.click().catch(() => { });
+            }
+            else {
+                await page.keyboard.press("Control+d").catch(() => { });
+            }
             await joinBtn.waitFor({ state: "visible", timeout: 25000 });
             await joinBtn.click({ force: true });
             console.log(`[Bot ${meetingId}] Clicked join button! Entered meeting.`);
@@ -256,25 +277,411 @@ async function runMeetingBot(options) {
         }
         await page.waitForTimeout(3000);
         await page.screenshot({ path: "bot-status.png" });
-        (0, index_1.updateJobStatus)(meetingId, "listening");
-        console.log(`[Bot ${meetingId}] In meeting. Listening for audio cues and presenting video...`);
-        // 2. The "Listening" Loop (Concept)
-        // To understand the boss saying "Jeremiah, switch on your camera", the bot must:
-        // a) Capture the meeting audio using page.evaluate() or a virtual audio cable
-        // b) Stream it to a transcription service (like Deepgram or OpenAI Realtime)
-        // c) When the trigger phrase is detected, click the camera button:
-        // Example of what the trigger execution looks like:
-        /*
-          onSpeechDetected("switch on your camera", async () => {
-            console.log("Cue detected! Turning on camera...");
-            const camBtn = page.getByRole("button", { name: /Turn on camera/i });
-            await camBtn.click();
-            // Because we injected the video via --use-file-for-fake-video-capture,
-            // Google Meet will broadcast the video file exactly as if it were a real webcam!
-          });
-        */
-        await page.waitForTimeout(60000 * 5); // Demo wait
-        console.log(`[Bot ${meetingId}] Meeting finished. Leaving...`);
+        (0, index_1.updateJobStatus)(meetingId, "presenting");
+        console.log(`[Bot ${meetingId}] In meeting. Starting agent capabilities...`);
+        // ─────────────────────────────────────────────────────────────────────────
+        // CAPABILITY 1: TTS Voice Intro
+        // Uses the browser's built-in SpeechSynthesis API — no external service.
+        // The bot greets the room before the presentation starts.
+        // ─────────────────────────────────────────────────────────────────────────
+        const speakIntro = async () => {
+            console.log(`[Bot ${meetingId}] Speaking intro via TTS...`);
+            try {
+                await page.evaluate(() => {
+                    return new Promise((resolve) => {
+                        if (!window.speechSynthesis) {
+                            resolve();
+                            return;
+                        }
+                        window.speechSynthesis.cancel();
+                        const utterance = new SpeechSynthesisUtterance(introMessage);
+                        utterance.rate = 0.95;
+                        utterance.pitch = 1.0;
+                        utterance.volume = 1.0;
+                        // Pick a natural-sounding voice if available
+                        const voices = window.speechSynthesis.getVoices();
+                        const preferred = voices.find((v) => /en[-_](US|GB|AU)/i.test(v.lang) && !/robot/i.test(v.name));
+                        if (preferred)
+                            utterance.voice = preferred;
+                        utterance.onend = () => resolve();
+                        utterance.onerror = () => resolve();
+                        window.speechSynthesis.speak(utterance);
+                    });
+                });
+                console.log(`[Bot ${meetingId}] Intro speech complete.`);
+            }
+            catch (e) {
+                console.warn(`[Bot ${meetingId}] TTS intro failed (non-fatal):`, e);
+            }
+        };
+        // Ensure camera stays off if no video
+        if (!videoUrl) {
+            const inCallCam = page.locator('button[aria-label*="Turn off camera" i], button[data-is-muted="false"][aria-label*="camera" i]').first();
+            if (await inCallCam.isVisible({ timeout: 1500 }).catch(() => false)) {
+                await inCallCam.click().catch(() => { });
+            }
+        }
+        // Unmute mic in-call if muted
+        const inCallMic = page.locator('button[aria-label*="Turn on microphone" i], button[data-is-muted="true"][aria-label*="microphone" i]').first();
+        if (await inCallMic.isVisible({ timeout: 1500 }).catch(() => false)) {
+            await inCallMic.click().catch(() => { });
+        }
+        // ─────────────────────────────────────────────────────────────────────────
+        // Post Welcome Message in Meet Chat so ALL participants see it immediately
+        // ─────────────────────────────────────────────────────────────────────────
+        const postChatGreeting = async (msg) => {
+            console.log(`[Bot ${meetingId}] Posting welcome greeting to Google Meet chat...`);
+            try {
+                const chatBtn = page.locator('button[aria-label*="Chat with everyone" i], button[aria-label*="Chat" i], [data-tooltip*="Chat" i], [aria-label*="Messages" i]').first();
+                if (await chatBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    await chatBtn.click().catch(() => { });
+                    await page.waitForTimeout(800);
+                }
+                const chatInput = page.locator('textarea[aria-label*="Send a message" i], textarea[aria-label*="Send a message to everyone" i], textarea[name="chatTextInput"], [contenteditable="true"]').first();
+                if (await chatInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    await chatInput.fill(`👋 ${msg}`);
+                    await chatInput.press("Enter");
+                    console.log(`[Bot ${meetingId}] Welcome message successfully posted in Meet chat!`);
+                }
+            }
+            catch (err) {
+                console.warn(`[Bot ${meetingId}] Could not post greeting to chat:`, err);
+            }
+        };
+        await postChatGreeting(introMessage);
+        await speakIntro();
+        // ─────────────────────────────────────────────────────────────────────────
+        // Turn ON Google Meet Live Captions for real-time speech-to-text
+        // ─────────────────────────────────────────────────────────────────────────
+        const turnOnCaptions = async () => {
+            console.log(`[Bot ${meetingId}] Activating Google Meet Live Captions...`);
+            try {
+                await page.keyboard.press("c").catch(() => { });
+                await page.waitForTimeout(800);
+                const captionBtn = page.locator('button[aria-label*="Turn on captions" i], button[data-tooltip*="captions" i], button[aria-label*="captions" i]').first();
+                if (await captionBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+                    await captionBtn.click().catch(() => { });
+                }
+                console.log(`[Bot ${meetingId}] Google Meet Live Captions activated.`);
+            }
+            catch (err) {
+                console.warn(`[Bot ${meetingId}] Failed to toggle captions:`, err);
+            }
+        };
+        await turnOnCaptions();
+        // ─────────────────────────────────────────────────────────────────────────
+        // CAPABILITY 2: Chat / Q&A Monitor
+        // Polls the Meet chat panel DOM every 5 s for new messages.
+        // When a new message arrives: logs it, pauses the presentation video,
+        // speaks an acknowledgement, then resumes.
+        // No external service — pure DOM scraping.
+        // ─────────────────────────────────────────────────────────────────────────
+        const seenMessages = new Set();
+        let presentationPaused = false;
+        const openChatPanel = async () => {
+            try {
+                // Meet's chat button: look for the chat/message icon in the toolbar
+                const chatBtn = page.locator('button[aria-label*="Chat" i], button[aria-label*="Messages" i], [data-tooltip*="Chat" i]').first();
+                if (await chatBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    await chatBtn.click().catch(() => { });
+                    await page.waitForTimeout(800);
+                    console.log(`[Bot ${meetingId}] Chat panel opened.`);
+                }
+            }
+            catch {
+                // Chat panel may already be open or unavailable — continue
+            }
+        };
+        const pausePresentation = async () => {
+            if (presentationPaused)
+                return;
+            presentationPaused = true;
+            await page.evaluate(() => {
+                const v = document.querySelector("video");
+                if (v && !v.paused)
+                    v.pause();
+            }).catch(() => { });
+            console.log(`[Bot ${meetingId}] Presentation paused for Q&A.`);
+        };
+        const resumePresentation = async () => {
+            if (!presentationPaused)
+                return;
+            presentationPaused = false;
+            await page.evaluate(() => {
+                const v = document.querySelector("video");
+                if (v && v.paused)
+                    v.play().catch(() => { });
+            }).catch(() => { });
+            console.log(`[Bot ${meetingId}] Presentation resumed.`);
+        };
+        const speakAck = async (msg) => {
+            try {
+                await page.evaluate((text) => {
+                    return new Promise((resolve) => {
+                        if (!window.speechSynthesis) {
+                            resolve();
+                            return;
+                        }
+                        window.speechSynthesis.cancel();
+                        const u = new SpeechSynthesisUtterance(`Thank you for your question: "${text}". ` +
+                            "The presenter will address it after the presentation.");
+                        u.rate = 0.95;
+                        const voices = window.speechSynthesis.getVoices();
+                        const preferred = voices.find((v) => /en[-_](US|GB|AU)/i.test(v.lang));
+                        if (preferred)
+                            u.voice = preferred;
+                        u.onend = () => resolve();
+                        u.onerror = () => resolve();
+                        window.speechSynthesis.speak(u);
+                    });
+                }, msg);
+            }
+            catch {
+                // TTS ack is best-effort
+            }
+        };
+        await openChatPanel();
+        // ─────────────────────────────────────────────────────────────────────────
+        // CAPABILITY 2B: Real-Time Spoken Keyword & Caption Monitor
+        // Reads Google Meet live captions in real time, detecting spoken keywords & attendee questions.
+        // ─────────────────────────────────────────────────────────────────────────
+        const captionMonitorLoop = async () => {
+            const seenCaptions = new Set();
+            const parsedKeywords = (keywordAlerts || "")
+                .split(",")
+                .map((k) => k.trim().toLowerCase())
+                .filter(Boolean);
+            console.log(`[Bot ${meetingId}] 🎙️ Live caption monitor running. Watching keywords:`, parsedKeywords);
+            while (true) {
+                await page.waitForTimeout(1500);
+                try {
+                    const activeCaptions = await page.evaluate(() => {
+                        const results = [];
+                        const containers = document.querySelectorAll('div[jsname="tgaKEf"], div[class*="caption" i], div[class*="VbkSUe"], div[class*="iTTPOb"], div[aria-live="polite"]');
+                        containers.forEach((el) => {
+                            const text = el.textContent?.trim() || "";
+                            if (text && text.length > 3) {
+                                const speakerEl = el.querySelector('[class*="speaker" i], [class*="zsT0Vo"], img[alt]');
+                                const speaker = speakerEl?.getAttribute("alt") || speakerEl?.textContent?.trim() || "Participant";
+                                results.push({ speaker, text });
+                            }
+                        });
+                        return results;
+                    });
+                    for (const cap of activeCaptions) {
+                        if (!seenCaptions.has(cap.text)) {
+                            seenCaptions.add(cap.text);
+                            console.log(`[Bot ${meetingId}] 🎙️ Spoken speech heard: [${cap.speaker}]: "${cap.text}"`);
+                            const lowerText = cap.text.toLowerCase();
+                            for (const kw of parsedKeywords) {
+                                if (lowerText.includes(kw)) {
+                                    console.log(`🎯 [Bot ${meetingId}] KEYWORD MATCH: "${kw}" spoken by ${cap.speaker}: "${cap.text}"`);
+                                    if (appUrl) {
+                                        const detectedMention = {
+                                            keyword: kw,
+                                            speaker: cap.speaker,
+                                            context: cap.text,
+                                            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                                        };
+                                        try {
+                                            await fetch(`${appUrl}/api/meetings/${meetingId}`, {
+                                                method: "PATCH",
+                                                headers: {
+                                                    "Content-Type": "application/json",
+                                                    "Authorization": `Bearer ${workerSecret}`,
+                                                },
+                                                body: JSON.stringify({
+                                                    mentions: JSON.stringify([detectedMention]),
+                                                }),
+                                            });
+                                        }
+                                        catch (e) {
+                                            console.warn(`[Bot ${meetingId}] Failed to sync mention to API:`, e);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                            // Also check if someone asks a question verbally
+                            const isQuestion = cap.text.includes("?") || /^(what|how|why|when|where|who|can|could|is|are|will|would|does|do)/i.test(cap.text);
+                            if (isQuestion && appUrl) {
+                                try {
+                                    await fetch(`${appUrl}/api/meetings/${meetingId}`, {
+                                        method: "PATCH",
+                                        headers: {
+                                            "Content-Type": "application/json",
+                                            "Authorization": `Bearer ${workerSecret}`,
+                                        },
+                                        body: JSON.stringify({
+                                            attendeeQuestions: JSON.stringify([`${cap.speaker}: ${cap.text}`]),
+                                        }),
+                                    });
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                }
+                catch {
+                    // Non-fatal
+                }
+            }
+        };
+        const chatMonitorLoop = async () => {
+            while (true) {
+                await page.waitForTimeout(5000);
+                try {
+                    const messages = await page.evaluate(() => {
+                        // Meet renders chat messages in elements like: [data-message-id] or aria-label on li items
+                        const results = [];
+                        // Try several known Meet chat DOM selectors (they change across Meet versions)
+                        const containers = document.querySelectorAll('[data-message-id], [jsname="xySENc"], .GDhqjd, [class*="message"]');
+                        containers.forEach((el) => {
+                            const id = el.getAttribute("data-message-id") || el.innerHTML.slice(0, 40);
+                            const authorEl = el.querySelector('[class*="author"], [class*="sender"], [data-self-name]');
+                            const textEl = el.querySelector('[class*="message-text"], [class*="msgBody"], span');
+                            if (textEl?.textContent?.trim()) {
+                                results.push({
+                                    id,
+                                    author: authorEl?.textContent?.trim() || "Someone",
+                                    text: textEl.textContent.trim(),
+                                });
+                            }
+                        });
+                        return results;
+                    });
+                    for (const msg of messages) {
+                        if (!seenMessages.has(msg.id)) {
+                            seenMessages.add(msg.id);
+                            console.log(`[Bot ${meetingId}] 💬 Chat from ${msg.author}: "${msg.text}"`);
+                            // Only react to messages that look like questions
+                            const isQuestion = msg.text.includes("?") ||
+                                /^(what|how|why|when|where|who|can|could|is|are|will|would|does|do)\b/i.test(msg.text);
+                            if (isQuestion) {
+                                console.log(`[Bot ${meetingId}] Q&A detected — pausing presentation.`);
+                                await pausePresentation();
+                                await speakAck(msg.text);
+                                // Resume after 15 s to give humans time to answer
+                                setTimeout(() => resumePresentation(), 15000);
+                            }
+                        }
+                    }
+                }
+                catch {
+                    // DOM polling errors are non-fatal
+                }
+            }
+        };
+        // ─────────────────────────────────────────────────────────────────────────
+        // CAPABILITY 3: Screen Share Detection
+        // Polls the Meet DOM every 8 s for the "is sharing their screen" banner.
+        // When someone else starts sharing: pauses our video, waits for them to stop.
+        // ─────────────────────────────────────────────────────────────────────────
+        const screenShareLoop = async () => {
+            let otherWasSharing = false;
+            while (true) {
+                await page.waitForTimeout(8000);
+                try {
+                    const otherIsSharing = await page.evaluate(() => {
+                        // Meet shows a banner / tile label when a remote participant shares
+                        const sharingBanner = document.querySelector('[aria-label*="sharing" i], [class*="screenshare"], [jsname*="share" i], ' +
+                            '[data-participant-id][class*="presenting"]');
+                        if (sharingBanner)
+                            return true;
+                        // Also check for the "is presenting" pill text in participant tiles
+                        const tiles = document.querySelectorAll('[class*="KF4T6b"], [class*="participant"]');
+                        for (const t of Array.from(tiles)) {
+                            if (t.textContent?.toLowerCase().includes("presenting"))
+                                return true;
+                        }
+                        return false;
+                    });
+                    if (otherIsSharing && !otherWasSharing) {
+                        otherWasSharing = true;
+                        console.log(`[Bot ${meetingId}] 🖥️  Remote screen share detected — pausing our presentation.`);
+                        await pausePresentation();
+                    }
+                    else if (!otherIsSharing && otherWasSharing) {
+                        otherWasSharing = false;
+                        console.log(`[Bot ${meetingId}] 🖥️  Remote screen share ended — resuming our presentation.`);
+                        await resumePresentation();
+                    }
+                }
+                catch {
+                    // Non-fatal
+                }
+            }
+        };
+        // ─────────────────────────────────────────────────────────────────────────
+        // CAPABILITY 4: Auto-Leave on Silence / Empty Room
+        // Polls participant count every 20 s. If the room is empty (only the bot
+        // is left) for more than 2 consecutive checks (~40 s), the bot leaves.
+        // ─────────────────────────────────────────────────────────────────────────
+        const autoLeaveLoop = async () => {
+            const deadline = Date.now() + maxMeetingMinutes * 60 * 1000;
+            let emptyChecks = 0;
+            while (true) {
+                await page.waitForTimeout(20000);
+                // Hard timeout
+                if (Date.now() > deadline) {
+                    console.log(`[Bot ${meetingId}] ⏰ Max meeting duration (${maxMeetingMinutes} min) reached. Leaving.`);
+                    return "timeout";
+                }
+                try {
+                    const participantCount = await page.evaluate(() => {
+                        // Meet shows participant count in a chip / button, e.g. "4 participants"
+                        const countEl = document.querySelector('[aria-label*="participant" i], [class*="participant-count"], ' +
+                            '[jsname="Nzrfne"], [class*="GGkqVb"]');
+                        if (countEl?.textContent) {
+                            const n = parseInt(countEl.textContent.replace(/\D/g, ""), 10);
+                            if (!isNaN(n))
+                                return n;
+                        }
+                        // Fallback: count visible participant tiles
+                        return document.querySelectorAll('[class*="KF4T6b"], [data-participant-id]').length;
+                    });
+                    console.log(`[Bot ${meetingId}] 👥 Participant count: ${participantCount}`);
+                    // ≤1 means only the bot itself remains
+                    if (participantCount <= 1) {
+                        emptyChecks++;
+                        if (emptyChecks >= emptyRoomChecksBeforeLeave) {
+                            console.log(`[Bot ${meetingId}] 🔇 Room empty for ${emptyChecks} checks. Auto-leaving.`);
+                            return "empty-room";
+                        }
+                    }
+                    else {
+                        emptyChecks = 0;
+                    }
+                }
+                catch {
+                    // Non-fatal
+                }
+                // Also check if we were kicked (Meet redirects away from the meeting)
+                try {
+                    const url = page.url();
+                    if (!url.includes("meet.google.com") || url.includes("leave") || url.includes("ended")) {
+                        console.log(`[Bot ${meetingId}] 🚪 Detected navigation away from meeting. Leaving.`);
+                        return "kicked";
+                    }
+                }
+                catch {
+                    return "context-closed";
+                }
+            }
+        };
+        // ─────────────────────────────────────────────────────────────────────────
+        // Run all loops concurrently. The auto-leave loop is the only one that
+        // resolves (the others loop forever). When it resolves, we fall through
+        // to the finally block which closes the context.
+        // ─────────────────────────────────────────────────────────────────────────
+        const exitReason = await Promise.race([
+            autoLeaveLoop(),
+            chatMonitorLoop().then(() => "chat-done"),
+            captionMonitorLoop().then(() => "captions-done"),
+            screenShareLoop().then(() => "share-done"),
+        ]);
+        (0, index_1.updateJobStatus)(meetingId, "completed");
+        console.log(`[Bot ${meetingId}] Meeting finished. Exit reason: ${exitReason}. Leaving...`);
     }
     catch (error) {
         console.error(`[Bot ${meetingId}] Error during meeting:`, error);

@@ -40,14 +40,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const { id } = await Promise.resolve(params);
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) return new NextResponse("Unauthorized", { status: 401 });
+    const authHeader = request.headers.get("Authorization");
+    const workerSecret = process.env.WORKER_SECRET || "dev-secret-key";
+    const isWorker = authHeader === `Bearer ${workerSecret}`;
 
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!user) return new NextResponse("Unauthorized", { status: 401 });
+    let meeting;
+    if (!isWorker) {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.email) return new NextResponse("Unauthorized", { status: 401 });
 
-    const meeting = await prisma.scheduledMeeting.findUnique({ where: { id } });
-    if (!meeting || meeting.userId !== user.id) return new NextResponse("Not Found", { status: 404 });
+      const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+      if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
+      meeting = await prisma.scheduledMeeting.findUnique({ where: { id } });
+      if (!meeting || meeting.userId !== user.id) return new NextResponse("Not Found", { status: 404 });
+    } else {
+      meeting = await prisma.scheduledMeeting.findUnique({ where: { id } });
+      if (!meeting) return new NextResponse("Not Found", { status: 404 });
+    }
 
     const body = await request.json();
     const { action, status, summary, mentions, attendeeQuestions, followUpDraft } = body;
@@ -55,8 +65,40 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const dataToUpdate: any = {};
     if (status) dataToUpdate.status = status;
     if (summary !== undefined) dataToUpdate.summary = summary;
-    if (mentions !== undefined) dataToUpdate.mentions = mentions;
-    if (attendeeQuestions !== undefined) dataToUpdate.attendeeQuestions = attendeeQuestions;
+    if (mentions !== undefined) {
+      if (meeting.mentions) {
+        try {
+          const oldList = JSON.parse(meeting.mentions);
+          const newList = JSON.parse(mentions);
+          if (Array.isArray(oldList) && Array.isArray(newList)) {
+            dataToUpdate.mentions = JSON.stringify([...oldList, ...newList]);
+          } else {
+            dataToUpdate.mentions = mentions;
+          }
+        } catch {
+          dataToUpdate.mentions = mentions;
+        }
+      } else {
+        dataToUpdate.mentions = mentions;
+      }
+    }
+    if (attendeeQuestions !== undefined) {
+      if (meeting.attendeeQuestions) {
+        try {
+          const oldQ = JSON.parse(meeting.attendeeQuestions);
+          const newQ = JSON.parse(attendeeQuestions);
+          if (Array.isArray(oldQ) && Array.isArray(newQ)) {
+            dataToUpdate.attendeeQuestions = JSON.stringify([...oldQ, ...newQ]);
+          } else {
+            dataToUpdate.attendeeQuestions = attendeeQuestions;
+          }
+        } catch {
+          dataToUpdate.attendeeQuestions = attendeeQuestions;
+        }
+      } else {
+        dataToUpdate.attendeeQuestions = attendeeQuestions;
+      }
+    }
     if (followUpDraft !== undefined) dataToUpdate.followUpDraft = followUpDraft;
 
     // Emergency Leave / Stop Agent action

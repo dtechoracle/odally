@@ -114,6 +114,10 @@ export const runMeetingAgent = inngest.createFunction(
             introMessage:
               meeting.introMessage ||
               "Hi everyone. I'm joining on behalf of the presenter. The session will begin shortly.",
+            keywordAlerts: meeting.keywordAlerts,
+            talkingPoints: meeting.talkingPoints,
+            appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+            workerSecret: process.env.WORKER_SECRET || "dev-secret-key",
           },
         }),
       });

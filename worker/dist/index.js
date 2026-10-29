@@ -28,14 +28,14 @@ app.use((req, res, next) => {
 });
 // Launch a new bot
 app.post("/run", async (req, res) => {
-    const { meetingId, meetUrl, videoUrl, accessToken, refreshToken } = req.body;
-    if (!meetingId || !meetUrl || !videoUrl) {
-        return res.status(400).json({ error: "Missing required parameters" });
+    const { meetingId, meetUrl, videoUrl, accessToken, refreshToken, agentConfig } = req.body;
+    if (!meetingId || !meetUrl) {
+        return res.status(400).json({ error: "Missing required parameters (meetingId and meetUrl are required)" });
     }
     // Record job as starting
     jobs.set(meetingId, { status: "launching" });
     // Fire and forget the actual bot process
-    (0, bot_1.runMeetingBot)({ meetingId, meetUrl, videoUrl, accessToken, refreshToken })
+    (0, bot_1.runMeetingBot)({ meetingId, meetUrl, videoUrl, accessToken, refreshToken, agentConfig })
         .then(() => {
         jobs.set(meetingId, { status: "completed" });
     })

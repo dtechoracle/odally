@@ -5,11 +5,19 @@ import { updateJobStatus } from "./index";
 import * as fs from "fs";
 
 interface AgentConfig {
-  /** Custom intro message spoken via TTS when the bot joins. */
+  /** Custom intro message spoken via TTS and posted to Meet chat when the bot joins. */
   introMessage?: string;
+  /** Comma-separated list of keywords to watch for in spoken speech & chat. */
+  keywordAlerts?: string;
+  /** Talking points provided by the user. */
+  talkingPoints?: string;
+  /** Next.js app URL for reporting live mentions. */
+  appUrl?: string;
+  /** Worker secret for authenticating with Next.js API. */
+  workerSecret?: string;
   /** Maximum meeting duration in minutes before the bot auto-leaves. Default: 90. */
   maxMeetingMinutes?: number;
-  /** Minutes of empty room before auto-leaving. Default: ~0.67 (2 × 20 s checks). */
+  /** Minutes of empty room before auto-leaving. Default: ~0.67 (2 x 20 s checks). */
   emptyRoomChecksBeforeLeave?: number;
 }
 
@@ -25,7 +33,11 @@ interface BotOptions {
 export async function runMeetingBot(options: BotOptions) {
   const { meetingId, meetUrl, videoUrl, accessToken, agentConfig = {} } = options;
   const {
-    introMessage = "Hi everyone. I'm joining on behalf of the presenter. The presentation will begin shortly. Feel free to ask questions in the chat.",
+    introMessage = "Hi everyone. I'm Odally, joining on behalf of the presenter. Feel free to ask questions in the chat.",
+    keywordAlerts = "",
+    talkingPoints = "",
+    appUrl = process.env.APP_URL || "http://localhost:3000",
+    workerSecret = process.env.WORKER_SECRET || "dev-secret-key",
     maxMeetingMinutes = 90,
     emptyRoomChecksBeforeLeave = 2,
   } = agentConfig;
@@ -233,6 +245,26 @@ export async function runMeetingBot(options: BotOptions) {
       const joinBtn = page.locator('button:has-text("Join now"), button:has-text("Ask to join"), [role="button"]:has-text("Join now"), [role="button"]:has-text("Ask to join")').first();
       
       console.log(`[Bot ${meetingId}] Waiting for Join button...`);
+            // If no video attached, turn off camera to prevent the green circle / pacman pattern
+      if (!videoUrl) {
+        console.log(`[Bot ${meetingId}] No presentation video attached. Disabling camera before join...`);
+        const camBtn = page.locator('button[aria-label*="Turn off camera" i], [data-is-muted="false"][aria-label*="camera" i]').first();
+        if (await camBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await camBtn.click().catch(() => {});
+        } else {
+          await page.keyboard.press("Control+e").catch(() => {});
+        }
+      }
+
+      // Check microphone: unmute so speaking works
+      const micBtn = page.locator('button[aria-label*="Turn on microphone" i], [data-is-muted="true"][aria-label*="microphone" i]').first();
+      if (await micBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        console.log(`[Bot ${meetingId}] Unmuting microphone before join...`);
+        await micBtn.click().catch(() => {});
+      } else {
+        await page.keyboard.press("Control+d").catch(() => {});
+      }
+
       await joinBtn.waitFor({ state: "visible", timeout: 25000 });
       await joinBtn.click({ force: true });
       console.log(`[Bot ${meetingId}] Clicked join button! Entered meeting.`);
@@ -300,7 +332,70 @@ export async function runMeetingBot(options: BotOptions) {
       }
     };
 
+        // Ensure camera stays off if no video
+    if (!videoUrl) {
+      const inCallCam = page.locator('button[aria-label*="Turn off camera" i], button[data-is-muted="false"][aria-label*="camera" i]').first();
+      if (await inCallCam.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await inCallCam.click().catch(() => {});
+      }
+    }
+
+    // Unmute mic in-call if muted
+    const inCallMic = page.locator('button[aria-label*="Turn on microphone" i], button[data-is-muted="true"][aria-label*="microphone" i]').first();
+    if (await inCallMic.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await inCallMic.click().catch(() => {});
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Post Welcome Message in Meet Chat so ALL participants see it immediately
+    // ─────────────────────────────────────────────────────────────────────────
+    const postChatGreeting = async (msg: string) => {
+      console.log(`[Bot ${meetingId}] Posting welcome greeting to Google Meet chat...`);
+      try {
+        const chatBtn = page.locator(
+          'button[aria-label*="Chat with everyone" i], button[aria-label*="Chat" i], [data-tooltip*="Chat" i], [aria-label*="Messages" i]'
+        ).first();
+        if (await chatBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await chatBtn.click().catch(() => {});
+          await page.waitForTimeout(800);
+        }
+        const chatInput = page.locator(
+          'textarea[aria-label*="Send a message" i], textarea[aria-label*="Send a message to everyone" i], textarea[name="chatTextInput"], [contenteditable="true"]'
+        ).first();
+        if (await chatInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await chatInput.fill(`👋 ${msg}`);
+          await chatInput.press("Enter");
+          console.log(`[Bot ${meetingId}] Welcome message successfully posted in Meet chat!`);
+        }
+      } catch (err) {
+        console.warn(`[Bot ${meetingId}] Could not post greeting to chat:`, err);
+      }
+    };
+
+    await postChatGreeting(introMessage);
     await speakIntro();
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Turn ON Google Meet Live Captions for real-time speech-to-text
+    // ─────────────────────────────────────────────────────────────────────────
+    const turnOnCaptions = async () => {
+      console.log(`[Bot ${meetingId}] Activating Google Meet Live Captions...`);
+      try {
+        await page.keyboard.press("c").catch(() => {});
+        await page.waitForTimeout(800);
+        const captionBtn = page.locator(
+          'button[aria-label*="Turn on captions" i], button[data-tooltip*="captions" i], button[aria-label*="captions" i]'
+        ).first();
+        if (await captionBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+          await captionBtn.click().catch(() => {});
+        }
+        console.log(`[Bot ${meetingId}] Google Meet Live Captions activated.`);
+      } catch (err) {
+        console.warn(`[Bot ${meetingId}] Failed to toggle captions:`, err);
+      }
+    };
+
+    await turnOnCaptions();
 
     // ─────────────────────────────────────────────────────────────────────────
     // CAPABILITY 2: Chat / Q&A Monitor
@@ -373,6 +468,97 @@ export async function runMeetingBot(options: BotOptions) {
     };
 
     await openChatPanel();
+
+        // ─────────────────────────────────────────────────────────────────────────
+    // CAPABILITY 2B: Real-Time Spoken Keyword & Caption Monitor
+    // Reads Google Meet live captions in real time, detecting spoken keywords & attendee questions.
+    // ─────────────────────────────────────────────────────────────────────────
+    const captionMonitorLoop = async (): Promise<string> => {
+      const seenCaptions = new Set<string>();
+      const parsedKeywords = (keywordAlerts || "")
+        .split(",")
+        .map((k) => k.trim().toLowerCase())
+        .filter(Boolean);
+
+      console.log(`[Bot ${meetingId}] 🎙️ Live caption monitor running. Watching keywords:`, parsedKeywords);
+
+      while (true) {
+        await page.waitForTimeout(1500);
+        try {
+          const activeCaptions = await page.evaluate((): { speaker: string; text: string }[] => {
+            const results: { speaker: string; text: string }[] = [];
+            const containers = document.querySelectorAll(
+              'div[jsname="tgaKEf"], div[class*="caption" i], div[class*="VbkSUe"], div[class*="iTTPOb"], div[aria-live="polite"]'
+            );
+            containers.forEach((el) => {
+              const text = el.textContent?.trim() || "";
+              if (text && text.length > 3) {
+                const speakerEl = el.querySelector('[class*="speaker" i], [class*="zsT0Vo"], img[alt]');
+                const speaker = speakerEl?.getAttribute("alt") || speakerEl?.textContent?.trim() || "Participant";
+                results.push({ speaker, text });
+              }
+            });
+            return results;
+          });
+
+          for (const cap of activeCaptions) {
+            if (!seenCaptions.has(cap.text)) {
+              seenCaptions.add(cap.text);
+              console.log(`[Bot ${meetingId}] 🎙️ Spoken speech heard: [${cap.speaker}]: "${cap.text}"`);
+
+              const lowerText = cap.text.toLowerCase();
+              for (const kw of parsedKeywords) {
+                if (lowerText.includes(kw)) {
+                  console.log(`🎯 [Bot ${meetingId}] KEYWORD MATCH: "${kw}" spoken by ${cap.speaker}: "${cap.text}"`);
+                  if (appUrl) {
+                    const detectedMention = {
+                      keyword: kw,
+                      speaker: cap.speaker,
+                      context: cap.text,
+                      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                    };
+                    try {
+                      await fetch(`${appUrl}/api/meetings/${meetingId}`, {
+                        method: "PATCH",
+                        headers: {
+                          "Content-Type": "application/json",
+                          "Authorization": `Bearer ${workerSecret}`,
+                        },
+                        body: JSON.stringify({
+                          mentions: JSON.stringify([detectedMention]),
+                        }),
+                      });
+                    } catch (e) {
+                      console.warn(`[Bot ${meetingId}] Failed to sync mention to API:`, e);
+                    }
+                  }
+                  break;
+                }
+              }
+
+              // Also check if someone asks a question verbally
+              const isQuestion = cap.text.includes("?") || /^(what|how|why|when|where|who|can|could|is|are|will|would|does|do)/i.test(cap.text);
+              if (isQuestion && appUrl) {
+                try {
+                  await fetch(`${appUrl}/api/meetings/${meetingId}`, {
+                    method: "PATCH",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${workerSecret}`,
+                    },
+                    body: JSON.stringify({
+                      attendeeQuestions: JSON.stringify([`${cap.speaker}: ${cap.text}`]),
+                    }),
+                  });
+                } catch {}
+              }
+            }
+          }
+        } catch {
+          // Non-fatal
+        }
+      }
+    };
 
     const chatMonitorLoop = async (): Promise<string> => {
       while (true) {
@@ -534,6 +720,7 @@ export async function runMeetingBot(options: BotOptions) {
     const exitReason = await Promise.race([
       autoLeaveLoop(),
       chatMonitorLoop().then(() => "chat-done"),
+      captionMonitorLoop().then(() => "captions-done"),
       screenShareLoop().then(() => "share-done"),
     ]);
 

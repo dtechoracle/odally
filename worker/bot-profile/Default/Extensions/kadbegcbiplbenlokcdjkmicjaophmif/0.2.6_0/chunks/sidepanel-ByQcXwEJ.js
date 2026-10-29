@@ -1,1 +1,0 @@
-import{j as e,az as r,aA as s}from"./style-BkavCXss.js";import{S as t,T as o,A as a}from"./sidepanel-C6x7kYQe.js";function n(){return e.jsx(t,{className:"min-h-screen"})}r.createRoot(document.getElementById("root")).render(e.jsx(s.StrictMode,{children:e.jsx(o,{children:e.jsx(a,{children:e.jsx(n,{})})})}));
