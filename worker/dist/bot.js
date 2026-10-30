@@ -37,6 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runMeetingBot = runMeetingBot;
+const tts_1 = require("./tts");
 const deepseek_1 = require("./deepseek");
 const playwright_extra_1 = require("playwright-extra");
 const puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extra-plugin-stealth"));
@@ -93,6 +94,72 @@ async function runMeetingBot(options) {
         normalizedUrl = `https://${normalizedUrl}`;
     }
     const page = await context.newPage();
+    // ─────────────────────────────────────────────────────────────────────────
+    // VIRTUAL MICROPHONE INJECTION
+    // Connects Web Audio destination to Google Meet WebRTC stream so spoken TTS
+    // plays directly into the call for all attendees to hear.
+    // ─────────────────────────────────────────────────────────────────────────
+    await page.addInitScript(() => {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx)
+                return;
+            const audioCtx = new AudioCtx();
+            const audioDest = audioCtx.createMediaStreamDestination();
+            // Silent oscillator keeping the audio stream active
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.00001;
+            osc.connect(gain);
+            gain.connect(audioDest);
+            osc.start();
+            window.__odallyPlayAudio = async function (base64Audio) {
+                try {
+                    if (audioCtx.state === "suspended") {
+                        await audioCtx.resume();
+                    }
+                    const binary = atob(base64Audio);
+                    const len = binary.length;
+                    const bytes = new Uint8Array(len);
+                    for (let i = 0; i < len; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioDest);
+                    source.connect(audioCtx.destination);
+                    return new Promise((resolve) => {
+                        source.onended = () => resolve();
+                        source.start(0);
+                    });
+                }
+                catch (e) {
+                    console.error("[VirtualMic] Audio playback error:", e);
+                }
+            };
+            const origGUM = navigator.mediaDevices ? navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices) : null;
+            if (origGUM) {
+                navigator.mediaDevices.getUserMedia = async function (constraints) {
+                    console.log("[VirtualMic] Intercepting getUserMedia:", constraints);
+                    const stream = await origGUM(constraints);
+                    if (constraints && constraints.audio) {
+                        const vTrack = audioDest.stream.getAudioTracks()[0];
+                        if (vTrack) {
+                            const oldTracks = stream.getAudioTracks();
+                            oldTracks.forEach((t) => stream.removeTrack(t));
+                            stream.addTrack(vTrack);
+                            console.log("[VirtualMic] ✅ Successfully injected virtual microphone into Google Meet!");
+                        }
+                    }
+                    return stream;
+                };
+            }
+        }
+        catch (err) {
+            console.error("[VirtualMic] Error setting up virtual microphone:", err);
+        }
+    });
     if (videoUrl) {
         try {
             console.log(`[Bot ${meetingId}] Pre-fetching presentation video from ${videoUrl}...`);
@@ -347,6 +414,23 @@ async function runMeetingBot(options) {
         // ─────────────────────────────────────────────────────────────────────────
         // Reusable Meet Chat Sender
         // ─────────────────────────────────────────────────────────────────────────
+        const speakThroughMeetingMic = async (text) => {
+            console.log(`[Bot ${meetingId}] 🎙️ Speaking into Google Meet microphone: "${text.slice(0, 100)}..."`);
+            try {
+                const audioChunks = await (0, tts_1.synthesizeSpeechToBase64List)(text);
+                for (const chunk of audioChunks) {
+                    await page.evaluate(async (base64) => {
+                        if (typeof window.__odallyPlayAudio === "function") {
+                            await window.__odallyPlayAudio(base64);
+                        }
+                    }, chunk);
+                }
+                console.log(`[Bot ${meetingId}] Finished speaking into microphone.`);
+            }
+            catch (err) {
+                console.warn(`[Bot ${meetingId}] TTS voice notice:`, err);
+            }
+        };
         const sendChatMessage = async (msg) => {
             try {
                 console.log(`[Bot ${meetingId}] 💬 Sending to Meet chat: "${msg.slice(0, 80)}..."`);
@@ -371,7 +455,7 @@ async function runMeetingBot(options) {
         // Send introduction message to chat
         await page.waitForTimeout(1000);
         await sendChatMessage(`👋 ${introMessage}`);
-        await speakIntro();
+        await speakThroughMeetingMic(introMessage);
         // ─────────────────────────────────────────────────────────────────────────
         // Turn ON Google Meet Live Captions for Real-Time Voice Recognition
         // ─────────────────────────────────────────────────────────────────────────
@@ -552,6 +636,9 @@ async function runMeetingBot(options) {
                                         talkingPoints,
                                     });
                                     if (aiReply) {
+                                        // Speak the answer out loud into the Google Meet call!
+                                        await speakThroughMeetingMic(aiReply);
+                                        // Also post text backup in chat
                                         await sendChatMessage(`🤖 [Odally AI]: ${aiReply}`);
                                     }
                                 }
@@ -610,6 +697,9 @@ async function runMeetingBot(options) {
                                         talkingPoints,
                                     });
                                     if (reply) {
+                                        // Speak the answer out loud into the Google Meet call!
+                                        await speakThroughMeetingMic(reply);
+                                        // Also post text backup in chat
                                         await sendChatMessage(`🤖 [Odally AI]: ${reply}`);
                                     }
                                 }
