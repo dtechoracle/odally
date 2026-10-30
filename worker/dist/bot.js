@@ -67,6 +67,7 @@ async function runMeetingBot(options) {
     if (fs.existsSync("./bot-profile")) {
         console.log(`[Bot ${meetingId}] Loading persistent Google Auth profile!`);
         context = await playwright_extra_1.chromium.launchPersistentContext("./bot-profile", contextOptions);
+        await context.grantPermissions(["microphone", "camera"], { origin: "https://meet.google.com" }).catch(() => { });
     }
     else {
         console.log(`[Bot ${meetingId}] No bot-profile found. Attempting to join anonymously.`);
@@ -94,6 +95,12 @@ async function runMeetingBot(options) {
         normalizedUrl = `https://${normalizedUrl}`;
     }
     const page = await context.newPage();
+    page.on("console", (msg) => {
+        const text = msg.text();
+        if (text.includes("[VirtualMic]") || text.includes("[WebRTC]")) {
+            console.log(`[Browser] ${text}`);
+        }
+    });
     // ─────────────────────────────────────────────────────────────────────────
     // VIRTUAL MICROPHONE INJECTION
     // Connects Web Audio destination to Google Meet WebRTC stream so spoken TTS
@@ -149,8 +156,9 @@ async function runMeetingBot(options) {
                     return;
                 const origGUM = target.getUserMedia.bind(target);
                 target.getUserMedia = async function (constraints) {
-                    console.log("[VirtualMic] Intercepting getUserMedia on:", target, constraints);
-                    const stream = await origGUM(constraints);
+                    console.log("[VirtualMic] Intercepting getUserMedia directly without querying hardware:", constraints);
+                    const tracks = [];
+                    // 1. Return virtual audio track directly: NO HARDWARE MIC REQUIRED!
                     if (constraints && constraints.audio) {
                         const vTrack = audioDest.stream.getAudioTracks()[0];
                         if (vTrack) {
@@ -171,13 +179,21 @@ async function runMeetingBot(options) {
                                 sampleRate: 48000,
                                 sampleSize: 16,
                             });
-                            const oldTracks = stream.getAudioTracks();
-                            oldTracks.forEach((t) => stream.removeTrack(t));
-                            stream.addTrack(vTrack);
-                            console.log("[VirtualMic] ✅ Attached virtual microphone track!");
+                            tracks.push(vTrack);
+                            console.log("[VirtualMic] ✅ Provided virtual microphone track directly (hardware completely bypassed)!");
                         }
                     }
-                    return stream;
+                    // 2. Video track if requested
+                    if (constraints && constraints.video) {
+                        try {
+                            const vStream = await origGUM({ video: constraints.video, audio: false });
+                            tracks.push(...vStream.getVideoTracks());
+                        }
+                        catch (err) {
+                            console.warn("[VirtualMic] Video request notice:", err);
+                        }
+                    }
+                    return new MediaStream(tracks);
                 };
             };
             if (navigator.mediaDevices)
@@ -353,6 +369,12 @@ async function runMeetingBot(options) {
             const notNowBtn = page.locator('button:has-text("Not now"), [role="button"]:has-text("Not now")').first();
             if (await notNowBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
                 console.log(`[Bot ${meetingId}] Dismissed notification popup.`);
+            }
+            // Dismiss any "Microphone can't be accessed" or modal dialogs
+            const dismissBtn = page.locator('button[aria-label="Close"], [aria-label*="Close" i], button:has-text("Dismiss"), button:has-text("Got it"), [data-mdc-dialog-action="close"]').first();
+            if (await dismissBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+                console.log(`[Bot ${meetingId}] Dismissed popup dialog.`);
+                await dismissBtn.click().catch(() => { });
                 await notNowBtn.click().catch(() => { });
             }
             // 2. Find and click whichever join button is ready (Join now or Ask to join)
