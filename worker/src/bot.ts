@@ -1,4 +1,4 @@
-import { synthesizeSpeechToBase64List } from "./tts";
+import { synthesizeSpeechToBase64List, prewarmFillers, INSTANT_FILLERS } from "./tts";
 import { askDeepSeekAnswer } from "./deepseek";
 import { chromium } from "playwright-extra";
 import stealthPlugin from "puppeteer-extra-plugin-stealth";
@@ -45,6 +45,7 @@ export async function runMeetingBot(options: BotOptions) {
   } = agentConfig;
 
   updateJobStatus(meetingId, "joining");
+  prewarmFillers().catch(() => {});
 
   console.log(`[Bot ${meetingId}] Launching browser...`);
   
@@ -132,6 +133,16 @@ export async function runMeetingBot(options: BotOptions) {
             await audioCtx.resume();
           }
 
+          // Cancel previous audio if playing
+          if ((window as any).__currentSource) {
+            try { (window as any).__currentSource.stop(); } catch(e){}
+            (window as any).__currentSource = null;
+          }
+          if ((window as any).__currentAudioEl) {
+            try { (window as any).__currentAudioEl.pause(); } catch(e){}
+            (window as any).__currentAudioEl = null;
+          }
+
           // 1. Decode into audio buffer and feed directly into audioDest (virtual microphone)
           const binary = atob(base64Audio);
           const len = binary.length;
@@ -144,18 +155,45 @@ export async function runMeetingBot(options: BotOptions) {
           source.buffer = audioBuffer;
           source.connect(audioDest);
           source.connect(audioCtx.destination);
+          (window as any).__currentSource = source;
 
           // 2. Also play through HTML5 Audio element so host speakers hear it
           const audioEl = new Audio("data:audio/mp3;base64," + base64Audio);
           audioEl.volume = 1.0;
+          (window as any).__currentAudioEl = audioEl;
           audioEl.play().catch(() => {});
 
           return new Promise<void>((resolve) => {
-            source.onended = () => resolve();
+            let ended = false;
+            const onEnd = () => {
+              if (!ended) {
+                ended = true;
+                (window as any).__currentSource = null;
+                (window as any).__currentAudioEl = null;
+                resolve();
+              }
+            };
+            source.onended = onEnd;
+            audioEl.onended = onEnd;
             source.start(0);
           });
         } catch (e) {
           console.error("[VirtualMic] Audio playback error:", e);
+        }
+      };
+
+            (window as any).__odallyStopAudio = function () {
+        console.log("[VirtualMic] 🛑 Interruption! Stopping all active audio playback.");
+        if ((window as any).__currentSource) {
+          try { (window as any).__currentSource.stop(); } catch(e){}
+          (window as any).__currentSource = null;
+        }
+        if ((window as any).__currentAudioEl) {
+          try {
+            (window as any).__currentAudioEl.pause();
+            (window as any).__currentAudioEl.currentTime = 0;
+          } catch(e){}
+          (window as any).__currentAudioEl = null;
         }
       };
 
@@ -557,14 +595,34 @@ export async function runMeetingBot(options: BotOptions) {
       }
     };
 
+    let isSpeaking = false;
+    let stopSpeakingRequested = false;
+
+    const stopSpeakingImmediately = async () => {
+      stopSpeakingRequested = true;
+      isSpeaking = false;
+      await page.evaluate(() => {
+        if (typeof (window as any).__odallyStopAudio === "function") {
+          (window as any).__odallyStopAudio();
+        }
+      }).catch(() => {});
+    };
+
     const speakThroughMeetingMic = async (text: string) => {
       // Ensure microphone is unmuted before speaking
       await ensureMicUnmuted();
+
+      isSpeaking = true;
+      stopSpeakingRequested = false;
 
       console.log(`[Bot ${meetingId}] 🎙️ Speaking into Google Meet microphone: "${text.slice(0, 100)}..."`);
       try {
         const audioChunks = await synthesizeSpeechToBase64List(text);
         for (const chunk of audioChunks) {
+          if (stopSpeakingRequested) {
+            console.log(`[Bot ${meetingId}] 🛑 Speaking halted due to interruption.`);
+            break;
+          }
           await page.evaluate(async (base64) => {
             if (typeof (window as any).__odallyPlayAudio === "function") {
               await (window as any).__odallyPlayAudio(base64);
@@ -574,6 +632,8 @@ export async function runMeetingBot(options: BotOptions) {
         console.log(`[Bot ${meetingId}] Finished speaking into microphone.`);
       } catch (err) {
         console.warn(`[Bot ${meetingId}] TTS voice notice:`, err);
+      } finally {
+        isSpeaking = false;
       }
     };
 
@@ -733,7 +793,7 @@ export async function runMeetingBot(options: BotOptions) {
       console.log(`[Bot ${meetingId}] 🎙️ Live caption monitor running. Watching keywords:`, parsedKeywords);
 
       while (true) {
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(400);
         try {
           const activeCaptions = await page.evaluate((): { speaker: string; text: string }[] => {
             const results: { speaker: string; text: string }[] = [];
@@ -752,6 +812,12 @@ export async function runMeetingBot(options: BotOptions) {
           });
 
           for (const cap of activeCaptions) {
+            // Check if another attendee speaks while Odally is talking (Interruption / Barge-in)
+            if (isSpeaking && !cap.speaker.toLowerCase().includes("odally") && !cap.speaker.toLowerCase().includes("you")) {
+              console.log(`🛑 [Bot ${meetingId}] Interrupted by ${cap.speaker}! Halting speech immediately.`);
+              await stopSpeakingImmediately();
+            }
+
             if (!seenCaptions.has(cap.text)) {
               seenCaptions.add(cap.text);
               console.log(`[Bot ${meetingId}] 🎙️ Spoken speech heard: [${cap.speaker}]: "${cap.text}"`);
@@ -804,17 +870,27 @@ export async function runMeetingBot(options: BotOptions) {
                   } catch {}
                 }
 
-                // Call DeepSeek AI to answer spoken question in Meet chat
+                // Instant conversational filler bridging (0ms response latency!)
+                const instantFiller = INSTANT_FILLERS[Math.floor(Math.random() * INSTANT_FILLERS.length)];
+                console.log(`⚡ [Bot ${meetingId}] Instant human filler bridging: "${instantFiller}"`);
+                // Speak the filler right away while DeepSeek computes in parallel!
+                const fillerPromise = speakThroughMeetingMic(instantFiller);
+
+                // Call DeepSeek AI concurrently
                 try {
                   console.log(`[Bot ${meetingId}] 🤖 Generating DeepSeek AI answer for: "${cap.text}" from ${cap.speaker}`);
-                  const aiReply = await askDeepSeekAnswer({
+                  const aiReplyPromise = askDeepSeekAnswer({
                     question: cap.text,
                     speaker: cap.speaker,
                     userName: "Jeremiah",
                     talkingPoints,
                   });
-                  if (aiReply) {
-                    // Speak the answer out loud into the Google Meet call!
+
+                  // Wait for both filler and DeepSeek answer
+                  const [, aiReply] = await Promise.all([fillerPromise, aiReplyPromise]);
+
+                  if (aiReply && !stopSpeakingRequested) {
+                    // Seamlessly speak the real answer right after the filler!
                     await speakThroughMeetingMic(aiReply);
                     // Also post text backup in chat
                     await sendChatMessage(`🤖 [Odally AI]: ${aiReply}`);
