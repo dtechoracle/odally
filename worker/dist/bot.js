@@ -146,10 +146,28 @@ async function runMeetingBot(options) {
                     if (constraints && constraints.audio) {
                         const vTrack = audioDest.stream.getAudioTracks()[0];
                         if (vTrack) {
+                            // Override constraints so WebRTC echo-cancellation does NOT silence synthetic TTS audio
+                            vTrack.applyConstraints = async () => { };
+                            vTrack.getCapabilities = () => ({
+                                channelCount: { min: 1, max: 2 },
+                                echoCancellation: [true, false],
+                                autoGainControl: [true, false],
+                                noiseSuppression: [true, false],
+                                sampleRate: { min: 8000, max: 96000 },
+                                sampleSize: { min: 16, max: 16 },
+                            });
+                            vTrack.getSettings = () => ({
+                                channelCount: 1,
+                                echoCancellation: false,
+                                autoGainControl: false,
+                                noiseSuppression: false,
+                                sampleRate: 48000,
+                                sampleSize: 16,
+                            });
                             const oldTracks = stream.getAudioTracks();
                             oldTracks.forEach((t) => stream.removeTrack(t));
                             stream.addTrack(vTrack);
-                            console.log("[VirtualMic] ✅ Successfully injected virtual microphone into Google Meet!");
+                            console.log("[VirtualMic] ✅ Injected Virtual Microphone with echo cancellation disabled!");
                         }
                     }
                     return stream;
@@ -414,7 +432,41 @@ async function runMeetingBot(options) {
         // ─────────────────────────────────────────────────────────────────────────
         // Reusable Meet Chat Sender
         // ─────────────────────────────────────────────────────────────────────────
+        const ensureMicUnmuted = async () => {
+            try {
+                console.log(`[Bot ${meetingId}] Checking microphone status...`);
+                // Check if mic button in Google Meet indicates muted
+                const isMuted = await page.evaluate(() => {
+                    const btn = document.querySelector('button[aria-label*="microphone" i], [data-is-muted][aria-label*="mic" i]');
+                    if (!btn)
+                        return false;
+                    const label = btn.getAttribute("aria-label")?.toLowerCase() || "";
+                    const mutedAttr = btn.getAttribute("data-is-muted");
+                    return mutedAttr === "true" || label.includes("turn on") || label.includes("unmute");
+                });
+                if (isMuted) {
+                    console.log(`[Bot ${meetingId}] Microphone is MUTED. Unmuting now...`);
+                    const micBtn = page.locator('button[aria-label*="Turn on microphone" i], button[data-is-muted="true"][aria-label*="microphone" i], button[aria-label*="microphone" i]').first();
+                    if (await micBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                        await micBtn.click().catch(() => { });
+                    }
+                    else {
+                        await page.keyboard.press("Control+d").catch(() => { });
+                    }
+                    await page.waitForTimeout(500);
+                    console.log(`[Bot ${meetingId}] Microphone unmuted successfully.`);
+                }
+                else {
+                    console.log(`[Bot ${meetingId}] Microphone is already active.`);
+                }
+            }
+            catch (err) {
+                console.warn(`[Bot ${meetingId}] Mic check notice:`, err);
+            }
+        };
         const speakThroughMeetingMic = async (text) => {
+            // Ensure microphone is unmuted before speaking
+            await ensureMicUnmuted();
             console.log(`[Bot ${meetingId}] 🎙️ Speaking into Google Meet microphone: "${text.slice(0, 100)}..."`);
             try {
                 const audioChunks = await (0, tts_1.synthesizeSpeechToBase64List)(text);
@@ -462,13 +514,27 @@ async function runMeetingBot(options) {
         const turnOnCaptions = async () => {
             console.log(`[Bot ${meetingId}] Activating Google Meet Live Captions...`);
             try {
-                await page.keyboard.press("c").catch(() => { });
-                await page.waitForTimeout(800);
-                const captionBtn = page.locator('button[aria-label*="Turn on captions" i], button[data-tooltip*="captions" i], button[aria-label*="captions" i]').first();
-                if (await captionBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+                // 1. Blur any active input (like chat textarea) so keyboard shortcuts work
+                await page.evaluate(() => {
+                    document.activeElement?.blur();
+                });
+                await page.waitForTimeout(500);
+                // 2. Direct click on the CC button
+                const captionBtn = page.locator('button[aria-label*="captions" i], button:has-text("closed_caption"), [data-tooltip*="captions" i], button[aria-label*="Turn on captions" i]').first();
+                if (await captionBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    console.log(`[Bot ${meetingId}] Clicking [CC] captions button...`);
                     await captionBtn.click().catch(() => { });
+                    await page.waitForTimeout(600);
                 }
-                console.log(`[Bot ${meetingId}] Live Captions toggled on.`);
+                else {
+                    // Fallback to keyboard shortcut 'c'
+                    console.log(`[Bot ${meetingId}] Pressing 'c' key to enable captions...`);
+                    await page.keyboard.press("c").catch(() => { });
+                    await page.waitForTimeout(600);
+                }
+                // Take updated screenshot of the meeting with captions enabled
+                await page.screenshot({ path: "bot-status.png" });
+                console.log(`[Bot ${meetingId}] ✅ Live Captions activation complete.`);
             }
             catch (err) {
                 console.warn(`[Bot ${meetingId}] Captions activation notice:`, err);
