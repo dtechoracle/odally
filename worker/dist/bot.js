@@ -37,6 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runMeetingBot = runMeetingBot;
+const deepseek_1 = require("./deepseek");
 const playwright_extra_1 = require("playwright-extra");
 const puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extra-plugin-stealth"));
 playwright_extra_1.chromium.use((0, puppeteer_extra_plugin_stealth_1.default)());
@@ -252,7 +253,21 @@ async function runMeetingBot(options) {
             }
             await joinBtn.waitFor({ state: "visible", timeout: 25000 });
             await joinBtn.click({ force: true });
-            console.log(`[Bot ${meetingId}] Clicked join button! Entered meeting.`);
+            console.log(`[Bot ${meetingId}] Clicked join button! Entering meeting...`);
+            // ─────────────────────────────────────────────────────────────────────────
+            // CRITICAL: WAIT FOR ACTUAL ROOM ADMISSION
+            // If "Ask to join" was clicked, wait for host to admit the bot.
+            // In active meeting, the Leave Call button or Chat button is present.
+            // ─────────────────────────────────────────────────────────────────────────
+            console.log(`[Bot ${meetingId}] Waiting for host admission / active meeting room...`);
+            const inCallIndicator = page.locator('button[aria-label*="Leave call" i], [data-tooltip*="Leave call" i], button[aria-label*="Leave" i], button[aria-label*="Chat" i]').first();
+            try {
+                await inCallIndicator.waitFor({ state: "visible", timeout: 90000 });
+                console.log(`[Bot ${meetingId}] 🎉 ADMITTED! Now inside the active meeting room.`);
+            }
+            catch {
+                console.log(`[Bot ${meetingId}] Note: Waiting for admission indicator timed out, proceeding best-effort.`);
+            }
         }
         catch (e) {
             console.log(`[Bot ${meetingId}] Error during join sequence: ${e}`);
@@ -329,29 +344,36 @@ async function runMeetingBot(options) {
         // ─────────────────────────────────────────────────────────────────────────
         // Post Welcome Message in Meet Chat so ALL participants see it immediately
         // ─────────────────────────────────────────────────────────────────────────
-        const postChatGreeting = async (msg) => {
-            console.log(`[Bot ${meetingId}] Posting welcome greeting to Google Meet chat...`);
+        // ─────────────────────────────────────────────────────────────────────────
+        // Reusable Meet Chat Sender
+        // ─────────────────────────────────────────────────────────────────────────
+        const sendChatMessage = async (msg) => {
             try {
-                const chatBtn = page.locator('button[aria-label*="Chat with everyone" i], button[aria-label*="Chat" i], [data-tooltip*="Chat" i], [aria-label*="Messages" i]').first();
-                if (await chatBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-                    await chatBtn.click().catch(() => { });
-                    await page.waitForTimeout(800);
-                }
+                console.log(`[Bot ${meetingId}] 💬 Sending to Meet chat: "${msg.slice(0, 80)}..."`);
                 const chatInput = page.locator('textarea[aria-label*="Send a message" i], textarea[aria-label*="Send a message to everyone" i], textarea[name="chatTextInput"], [contenteditable="true"]').first();
+                if (!(await chatInput.isVisible({ timeout: 1500 }).catch(() => false))) {
+                    const chatBtn = page.locator('button[aria-label*="Chat with everyone" i], button[aria-label*="Chat" i], [data-tooltip*="Chat" i], [aria-label*="Messages" i]').first();
+                    if (await chatBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                        await chatBtn.click().catch(() => { });
+                        await page.waitForTimeout(600);
+                    }
+                }
                 if (await chatInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-                    await chatInput.fill(`👋 ${msg}`);
+                    await chatInput.fill(msg);
                     await chatInput.press("Enter");
-                    console.log(`[Bot ${meetingId}] Welcome message successfully posted in Meet chat!`);
+                    console.log(`[Bot ${meetingId}] ✅ Chat message sent successfully.`);
                 }
             }
             catch (err) {
-                console.warn(`[Bot ${meetingId}] Could not post greeting to chat:`, err);
+                console.warn(`[Bot ${meetingId}] Error sending chat message:`, err);
             }
         };
-        await postChatGreeting(introMessage);
+        // Send introduction message to chat
+        await page.waitForTimeout(1000);
+        await sendChatMessage(`👋 ${introMessage}`);
         await speakIntro();
         // ─────────────────────────────────────────────────────────────────────────
-        // Turn ON Google Meet Live Captions for real-time speech-to-text
+        // Turn ON Google Meet Live Captions for Real-Time Voice Recognition
         // ─────────────────────────────────────────────────────────────────────────
         const turnOnCaptions = async () => {
             console.log(`[Bot ${meetingId}] Activating Google Meet Live Captions...`);
@@ -362,10 +384,10 @@ async function runMeetingBot(options) {
                 if (await captionBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
                     await captionBtn.click().catch(() => { });
                 }
-                console.log(`[Bot ${meetingId}] Google Meet Live Captions activated.`);
+                console.log(`[Bot ${meetingId}] Live Captions toggled on.`);
             }
             catch (err) {
-                console.warn(`[Bot ${meetingId}] Failed to toggle captions:`, err);
+                console.warn(`[Bot ${meetingId}] Captions activation notice:`, err);
             }
         };
         await turnOnCaptions();
@@ -503,21 +525,39 @@ async function runMeetingBot(options) {
                                 }
                             }
                             // Also check if someone asks a question verbally
-                            const isQuestion = cap.text.includes("?") || /^(what|how|why|when|where|who|can|could|is|are|will|would|does|do)/i.test(cap.text);
-                            if (isQuestion && appUrl) {
-                                try {
-                                    await fetch(`${appUrl}/api/meetings/${meetingId}`, {
-                                        method: "PATCH",
-                                        headers: {
-                                            "Content-Type": "application/json",
-                                            "Authorization": `Bearer ${workerSecret}`,
-                                        },
-                                        body: JSON.stringify({
-                                            attendeeQuestions: JSON.stringify([`${cap.speaker}: ${cap.text}`]),
-                                        }),
-                                    });
+                            const isQuestion = cap.text.includes("?") || /^(what|how|why|when|where|who|can|could|is|are|will|would|does|do)/i.test(cap.text);
+                            if (isQuestion) {
+                                if (appUrl) {
+                                    try {
+                                        await fetch(`${appUrl}/api/meetings/${meetingId}`, {
+                                            method: "PATCH",
+                                            headers: {
+                                                "Content-Type": "application/json",
+                                                "Authorization": `Bearer ${workerSecret}`,
+                                            },
+                                            body: JSON.stringify({
+                                                attendeeQuestions: JSON.stringify([`${cap.speaker}: ${cap.text}`]),
+                                            }),
+                                        });
+                                    }
+                                    catch { }
                                 }
-                                catch { }
+                                // Call DeepSeek AI to answer spoken question in Meet chat
+                                try {
+                                    console.log(`[Bot ${meetingId}] 🤖 Generating DeepSeek AI answer for: "${cap.text}" from ${cap.speaker}`);
+                                    const aiReply = await (0, deepseek_1.askDeepSeekAnswer)({
+                                        question: cap.text,
+                                        speaker: cap.speaker,
+                                        userName: "Jeremiah",
+                                        talkingPoints,
+                                    });
+                                    if (aiReply) {
+                                        await sendChatMessage(`🤖 [Odally AI]: ${aiReply}`);
+                                    }
+                                }
+                                catch (err) {
+                                    console.warn(`[Bot ${meetingId}] DeepSeek answer notice:`, err);
+                                }
                             }
                         }
                     }
@@ -558,10 +598,24 @@ async function runMeetingBot(options) {
                             const isQuestion = msg.text.includes("?") ||
                                 /^(what|how|why|when|where|who|can|could|is|are|will|would|does|do)\b/i.test(msg.text);
                             if (isQuestion) {
-                                console.log(`[Bot ${meetingId}] Q&A detected — pausing presentation.`);
+                                console.log(`[Bot ${meetingId}] Q&A detected in chat — generating DeepSeek response.`);
                                 await pausePresentation();
                                 await speakAck(msg.text);
-                                // Resume after 15 s to give humans time to answer
+                                // Call DeepSeek to answer the question in chat
+                                try {
+                                    const reply = await (0, deepseek_1.askDeepSeekAnswer)({
+                                        question: msg.text,
+                                        speaker: msg.author,
+                                        userName: "Jeremiah",
+                                        talkingPoints,
+                                    });
+                                    if (reply) {
+                                        await sendChatMessage(`🤖 [Odally AI]: ${reply}`);
+                                    }
+                                }
+                                catch (e) {
+                                    console.warn(`[Bot ${meetingId}] Chat DeepSeek reply error:`, e);
+                                }
                                 setTimeout(() => resumePresentation(), 15000);
                             }
                         }
