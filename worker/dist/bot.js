@@ -118,17 +118,22 @@ async function runMeetingBot(options) {
                     if (audioCtx.state === "suspended") {
                         await audioCtx.resume();
                     }
+                    // 1. Decode into audio buffer and feed directly into audioDest (virtual microphone)
                     const binary = atob(base64Audio);
                     const len = binary.length;
                     const bytes = new Uint8Array(len);
                     for (let i = 0; i < len; i++) {
                         bytes[i] = binary.charCodeAt(i);
                     }
-                    const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+                    const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer.slice(0));
                     const source = audioCtx.createBufferSource();
                     source.buffer = audioBuffer;
                     source.connect(audioDest);
                     source.connect(audioCtx.destination);
+                    // 2. Also play through HTML5 Audio element so host speakers hear it
+                    const audioEl = new Audio("data:audio/mp3;base64," + base64Audio);
+                    audioEl.volume = 1.0;
+                    audioEl.play().catch(() => { });
                     return new Promise((resolve) => {
                         source.onended = () => resolve();
                         source.start(0);
@@ -138,15 +143,17 @@ async function runMeetingBot(options) {
                     console.error("[VirtualMic] Audio playback error:", e);
                 }
             };
-            const origGUM = navigator.mediaDevices ? navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices) : null;
-            if (origGUM) {
-                navigator.mediaDevices.getUserMedia = async function (constraints) {
-                    console.log("[VirtualMic] Intercepting getUserMedia:", constraints);
+            // 1. Intercept getUserMedia on both prototype and instance
+            const patchGUM = (target) => {
+                if (!target || !target.getUserMedia)
+                    return;
+                const origGUM = target.getUserMedia.bind(target);
+                target.getUserMedia = async function (constraints) {
+                    console.log("[VirtualMic] Intercepting getUserMedia on:", target, constraints);
                     const stream = await origGUM(constraints);
                     if (constraints && constraints.audio) {
                         const vTrack = audioDest.stream.getAudioTracks()[0];
                         if (vTrack) {
-                            // Override constraints so WebRTC echo-cancellation does NOT silence synthetic TTS audio
                             vTrack.applyConstraints = async () => { };
                             vTrack.getCapabilities = () => ({
                                 channelCount: { min: 1, max: 2 },
@@ -167,10 +174,45 @@ async function runMeetingBot(options) {
                             const oldTracks = stream.getAudioTracks();
                             oldTracks.forEach((t) => stream.removeTrack(t));
                             stream.addTrack(vTrack);
-                            console.log("[VirtualMic] ✅ Injected Virtual Microphone with echo cancellation disabled!");
+                            console.log("[VirtualMic] ✅ Attached virtual microphone track!");
                         }
                     }
                     return stream;
+                };
+            };
+            if (navigator.mediaDevices)
+                patchGUM(navigator.mediaDevices);
+            if (window.MediaDevices && window.MediaDevices.prototype) {
+                patchGUM(window.MediaDevices.prototype);
+            }
+            // 2. Intercept RTCPeerConnection to route audioDest to outgoing WebRTC connection
+            if (window.RTCPeerConnection) {
+                const origAddTrack = window.RTCPeerConnection.prototype.addTrack;
+                window.RTCPeerConnection.prototype.addTrack = function (track, ...streams) {
+                    console.log("[WebRTC] addTrack called with track kind:", track ? track.kind : "none");
+                    if (track && track.kind === "audio") {
+                        const vTrack = audioDest.stream.getAudioTracks()[0];
+                        if (vTrack) {
+                            console.log("[WebRTC] ✅ Replaced microphone track with Virtual Mic in RTCPeerConnection!");
+                            return origAddTrack.call(this, vTrack, ...streams);
+                        }
+                    }
+                    return origAddTrack.call(this, track, ...streams);
+                };
+            }
+            // 3. Intercept RTCRtpSender.prototype.replaceTrack for mute/unmute events
+            if (window.RTCRtpSender) {
+                const origReplaceTrack = window.RTCRtpSender.prototype.replaceTrack;
+                window.RTCRtpSender.prototype.replaceTrack = function (track) {
+                    console.log("[WebRTC] replaceTrack called with track:", track ? track.kind : "null");
+                    if (track && track.kind === "audio") {
+                        const vTrack = audioDest.stream.getAudioTracks()[0];
+                        if (vTrack) {
+                            console.log("[WebRTC] ✅ Replaced track with Virtual Mic in RTCRtpSender!");
+                            return origReplaceTrack.call(this, vTrack);
+                        }
+                    }
+                    return origReplaceTrack.call(this, track);
                 };
             }
         }

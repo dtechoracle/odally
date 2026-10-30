@@ -127,8 +127,13 @@ function ScheduleMeetingContent() {
         url: data.document.url,
         size: data.document.size,
       });
-      if (data.document.extractedText && !talkingPoints) {
-        setTalkingPoints(data.document.extractedText.slice(0, 1000));
+      if (data.document.extractedText) {
+        setTalkingPoints((prev) => {
+          if (prev && prev.trim() && prev !== "Explain the file") {
+            return `${prev}\n\n[Document Material (${data.document.filename})]:\n${data.document.extractedText.slice(0, 3000)}`;
+          }
+          return `Document Material (${data.document.filename}):\n${data.document.extractedText.slice(0, 3000)}`;
+        });
       }
     } catch (err) {
       console.error(err);

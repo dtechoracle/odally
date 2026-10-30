@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import mammoth from "mammoth";
 
 export async function POST(request: Request) {
   try {
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
       { expiresIn: 604800 }
     );
 
-    // If it's plain text or markdown, decode simple text
+    // Extract text from plain text or docx documents
     let extractedText = "";
     if (
       mimeType.startsWith("text/") ||
@@ -65,6 +66,13 @@ export async function POST(request: Request) {
       filename.endsWith(".md")
     ) {
       extractedText = buffer.toString("utf-8");
+    } else if (filename.endsWith(".docx")) {
+      try {
+        const result = await mammoth.extractRawText({ buffer });
+        extractedText = result.value || "";
+      } catch (err) {
+        console.warn("Could not extract docx text:", err);
+      }
     }
 
     return NextResponse.json({

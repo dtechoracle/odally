@@ -7,15 +7,17 @@ exports.askDeepSeekAnswer = askDeepSeekAnswer;
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 async function askDeepSeekAnswer(params) {
     const { question, speaker, userName = "the presenter", talkingPoints = "", documentName = "", apiKey = process.env.DEEPSEEK_API_KEY || "sk-3fac4c3cd3724daea515cbc307d36378", } = params;
-    const prompt = `You are Odally, a polite AI assistant attending a Google Meet call on behalf of ${userName}.
+    const prompt = `You are Odally, an AI meeting surrogate attending a Google Meet call on behalf of ${userName}.
 An attendee named "${speaker}" asked: "${question}".
 
-Briefing / Materials provided by ${userName}:
-${talkingPoints ? `- Talking points: ${talkingPoints}` : ""}
-${documentName ? `- Document: ${documentName}` : ""}
+Presenter's Materials & Briefing:
+${talkingPoints ? `${talkingPoints}` : "Web development curriculum and presentation update."}
+${documentName ? `Attached Document: ${documentName}` : ""}
 
-Provide a concise, helpful 1-2 sentence response to post directly in the Google Meet chat.
-If you know the answer from the briefing, answer clearly. If not, politely state that you've recorded their question and ${userName} will follow up with them directly.`;
+Instructions:
+1. Answer the question directly and knowledgeably in 1-2 natural spoken sentences, speaking directly on behalf of ${userName}.
+2. If asked about the curriculum, files, or topics, explain the web development curriculum (HTML, CSS, JavaScript, React, Node.js, and practical projects) confidently.
+3. Keep the answer concise and friendly for spoken audio.`;
     try {
         const res = await fetch(DEEPSEEK_API_URL, {
             method: "POST",
