@@ -3,7 +3,7 @@
 import { unstable_noStore as noStore } from "next/cache";
 noStore();
 
-import React, { Suspense, useState, useEffect } from "react";
+import React, { Suspense, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -20,6 +20,11 @@ import {
   ExternalLink,
   Clock,
   Send,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  CheckCircle2,
+  ListTodo,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
@@ -27,7 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { getExecutionLog } from "@/lib/db";
-import { formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatTime, cn } from "@/lib/utils";
 
 const statusLabels: Record<string, string> = {
   scheduled: "Scheduled",
@@ -52,6 +57,32 @@ function MeetingDetailContent() {
   const [copiedDraft, setCopiedDraft] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    summary: true,
+    mentions: true,
+    questions: true,
+    email: true,
+    materials: true,
+    execution: true,
+  });
+
+  const toggleSection = (section: string) => {
+    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const allCollapsed = Object.values(collapsedSections).every(Boolean);
+
+  const toggleAllSections = () => {
+    const nextVal = !allCollapsed;
+    setCollapsedSections({
+      summary: nextVal,
+      mentions: nextVal,
+      questions: nextVal,
+      email: nextVal,
+      materials: nextVal,
+      execution: nextVal,
+    });
+  };
 
   const fetchMeeting = () => {
     if (!params?.id) return;
@@ -149,7 +180,7 @@ function MeetingDetailContent() {
   const status = statusLabels[meeting.status] || meeting.status;
 
   // Parse AI Intelligence fields if present
-  let parsedSummary: { bullets?: string[]; actionItems?: string[] } | null = null;
+  let parsedSummary: { bullets?: string[]; actionItems?: string[]; attendees?: string[] } | null = null;
   if (meeting.summary) {
     try {
       parsedSummary = JSON.parse(meeting.summary);
@@ -158,19 +189,75 @@ function MeetingDetailContent() {
     }
   }
 
-  let parsedMentions: Array<{ keyword: string; timestamp: string; context: string }> = [];
+  let parsedMentions: Array<{ keyword: string; speaker?: string; timestamp: string; context: string }> = [];
   if (meeting.mentions) {
     try {
-      parsedMentions = JSON.parse(meeting.mentions);
+      const rawMentions = JSON.parse(meeting.mentions);
+      if (Array.isArray(rawMentions)) {
+        parsedMentions = rawMentions;
+      }
     } catch {}
   }
 
   let parsedQuestions: Array<{ id: string; author: string; question: string; timestamp: string }> = [];
   if (meeting.attendeeQuestions) {
     try {
-      parsedQuestions = JSON.parse(meeting.attendeeQuestions);
+      const rawQ = JSON.parse(meeting.attendeeQuestions);
+      if (Array.isArray(rawQ)) {
+        parsedQuestions = rawQ.map((item: any, idx: number) => {
+          if (typeof item === "string") {
+            const colonIdx = item.indexOf(":");
+            if (colonIdx > 0) {
+              return {
+                id: `q-${idx}`,
+                author: item.slice(0, colonIdx).trim(),
+                question: item.slice(colonIdx + 1).trim(),
+                timestamp: "",
+              };
+            }
+            return { id: `q-${idx}`, author: "Attendee", question: item, timestamp: "" };
+          }
+          return {
+            id: item.id || `q-${idx}`,
+            author: item.author || item.speaker || "Attendee",
+            question: item.question || item.text || "",
+            timestamp: item.timestamp || "",
+          };
+        });
+      }
     } catch {}
   }
+
+  // Compute all unique attendees/participants identified across summary, questions, and mentions
+  const identifiedAttendees = useMemo(() => {
+    const map = new Map<string, string>();
+    const addName = (name?: string) => {
+      if (!name) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const lower = trimmed.toLowerCase();
+      if (
+        lower === "you" ||
+        lower.includes("odally") ||
+        lower === "system" ||
+        lower === "presenter" ||
+        lower === "the presenter"
+      ) {
+        return;
+      }
+      if (!map.has(lower)) {
+        map.set(lower, trimmed);
+      }
+    };
+
+    if (parsedSummary?.attendees && Array.isArray(parsedSummary.attendees)) {
+      parsedSummary.attendees.forEach(addName);
+    }
+    parsedQuestions.forEach((q) => addName(q.author));
+    parsedMentions.forEach((m) => addName(m.speaker));
+
+    return Array.from(map.values());
+  }, [parsedSummary, parsedQuestions, parsedMentions]);
 
   return (
     <DashboardShell>
@@ -220,299 +307,563 @@ function MeetingDetailContent() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Column */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4">
+            {/* Quick Accordion Toolbar */}
+            <div className="flex items-center justify-between px-1 py-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Session Intelligence & Briefing
+                </span>
+                <Badge variant="neutral" className="text-[10px] font-medium text-slate-500 bg-slate-100">
+                  Collapsible sections
+                </Badge>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleAllSections}
+                className="h-7 px-2 text-xs text-slate-600 hover:text-slate-900 gap-1.5"
+              >
+                {allCollapsed ? (
+                  <>
+                    <ChevronDown className="h-3.5 w-3.5" />
+                    Expand All
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp className="h-3.5 w-3.5" />
+                    Collapse All
+                  </>
+                )}
+              </Button>
+            </div>
             
             {/* 1. POST-MEETING AI SUMMARY & ACTION ITEMS */}
             {(meeting.status === "completed" || meeting.summary) && (
-              <Card className="border-sky-200 bg-gradient-to-b from-sky-50/40 to-white shadow-sm">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-sky-500/10 flex items-center justify-center text-sky-600">
+              <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+                <CardHeader
+                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  onClick={() => toggleSection("summary")}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
                         <Sparkles className="h-4 w-4" />
                       </div>
-                      <CardTitle className="text-base text-slate-900">Post-Meeting AI Summary</CardTitle>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleGenerateSummary}
-                      disabled={generatingSummary}
-                      className="text-xs text-sky-600 hover:text-sky-700 h-8"
-                    >
-                      {generatingSummary ? "Refreshing..." : "Re-generate"}
-                    </Button>
-                  </div>
-                  <CardDescription className="text-xs">
-                    Generated recap of what happened while the agent attended for you.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {parsedSummary ? (
-                    <>
-                      {/* Bullets */}
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Executive Recap</p>
-                        <ul className="space-y-1.5 text-sm text-slate-800 list-disc list-inside">
-                          {parsedSummary.bullets?.map((b, i) => (
-                            <li key={i} className="leading-relaxed">{b}</li>
-                          ))}
-                        </ul>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                            Post-Meeting Executive Summary
+                          </CardTitle>
+                          {identifiedAttendees.length > 0 && (
+                            <Badge variant="outline" className="text-[11px] font-normal text-indigo-700 bg-indigo-50/70 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
+                              <Users className="h-3 w-3 mr-1 inline" />
+                              {identifiedAttendees.length} {identifiedAttendees.length === 1 ? "participant" : "participants"}
+                            </Badge>
+                          )}
+                        </div>
+                        <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">
+                          Key takeaways, attendee discussion highlights, and action items.
+                        </CardDescription>
                       </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGenerateSummary();
+                        }}
+                        disabled={generatingSummary}
+                        className="text-xs text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 h-8 px-2.5"
+                      >
+                        {generatingSummary ? "Refreshing..." : "Re-generate"}
+                      </Button>
+                      <div className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600">
+                        <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", !collapsedSections.summary && "rotate-180")} />
+                      </div>
+                    </div>
+                  </div>
 
-                      {/* Action items */}
-                      {parsedSummary.actionItems && parsedSummary.actionItems.length > 0 && (
-                        <div className="pt-2 border-t border-sky-100">
-                          <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                            Next Steps & Action Items
-                          </p>
-                          <div className="space-y-1.5">
-                            {parsedSummary.actionItems.map((act, i) => (
-                              <div key={i} className="flex items-start gap-2 text-sm text-slate-800">
-                                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 text-xs flex items-center justify-center shrink-0 mt-0.5">
-                                  ✓
+                  {/* Collapsed One-Line Preview */}
+                  {collapsedSections.summary && parsedSummary && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 text-xs text-slate-500">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300 shrink-0">Preview:</span>
+                      <span className="truncate italic text-slate-600 dark:text-slate-400">
+                        {parsedSummary.bullets?.[0] || "Click to view full executive summary"}
+                      </span>
+                      <span className="ml-auto text-[11px] text-indigo-600 dark:text-indigo-400 font-medium shrink-0">
+                        Click to view
+                      </span>
+                    </div>
+                  )}
+                </CardHeader>
+
+                {!collapsedSections.summary && (
+                  <CardContent className="p-4 sm:p-5 pt-0 space-y-5 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                    {parsedSummary ? (
+                      <>
+                        {/* 1.1 Attendees & Participants Row */}
+                        {identifiedAttendees.length > 0 && (
+                          <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+                            <div className="flex items-center justify-between mb-2.5">
+                              <div className="flex items-center gap-1.5">
+                                <Users className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                                  Identified Attendees & Speakers ({identifiedAttendees.length})
                                 </span>
-                                <span>{act}</span>
+                              </div>
+                              <span className="text-[11px] text-slate-400">Captured in call</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {identifiedAttendees.map((name, i) => {
+                                const initials = name
+                                  .split(" ")
+                                  .filter(Boolean)
+                                  .map((p) => p[0])
+                                  .slice(0, 2)
+                                  .join("")
+                                  .toUpperCase();
+                                return (
+                                  <div
+                                    key={i}
+                                    className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xs text-xs font-medium text-slate-800 dark:text-slate-200"
+                                  >
+                                    <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                      {initials || "P"}
+                                    </span>
+                                    <span>{name}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 1.2 Executive Recap Bullets */}
+                        <div className="space-y-2.5">
+                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                            Executive Highlights & Discussions
+                          </p>
+                          <div className="space-y-2">
+                            {parsedSummary.bullets?.map((b, i) => (
+                              <div
+                                key={i}
+                                className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/70 dark:border-slate-700/60 text-sm text-slate-800 dark:text-slate-200 leading-relaxed"
+                              >
+                                <span className="w-5 h-5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5">
+                                  {i + 1}
+                                </span>
+                                <div className="flex-1">{b}</div>
                               </div>
                             ))}
                           </div>
                         </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="py-4 text-center">
-                      <p className="text-sm text-slate-500 mb-3">No summary generated yet for this session.</p>
-                      <Button size="sm" onClick={handleGenerateSummary} disabled={generatingSummary} className="bg-sky-500 hover:bg-sky-600">
-                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                        Generate AI Summary Now
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
+
+                        {/* 1.3 Action Items */}
+                        {parsedSummary.actionItems && parsedSummary.actionItems.length > 0 && (
+                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                              Next Steps & Action Items
+                            </p>
+                            <div className="space-y-2">
+                              {parsedSummary.actionItems.map((act, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-start gap-3 p-3.5 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 text-sm text-slate-800 dark:text-slate-200"
+                                >
+                                  <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs flex items-center justify-center shrink-0 font-bold mt-0.5">
+                                    ✓
+                                  </div>
+                                  <div className="flex-1 font-medium leading-relaxed">{act}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="py-6 text-center">
+                        <p className="text-sm text-slate-500 mb-3">No summary generated yet for this session.</p>
+                        <Button
+                          size="sm"
+                          onClick={handleGenerateSummary}
+                          disabled={generatingSummary}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                          Generate AI Summary Now
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                )}
               </Card>
             )}
 
             {/* 2. "DID THEY MENTION MY NAME?" ALERTS */}
             {parsedMentions.length > 0 && (
-              <Card className="border-amber-200 bg-amber-50/40 shadow-sm">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600">
-                      <AlertTriangle className="h-4 w-4" />
+              <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+                <CardHeader
+                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  onClick={() => toggleSection("mentions")}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 shrink-0">
+                        <AlertTriangle className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                            Name & Keyword Alerts
+                          </CardTitle>
+                          <Badge variant="outline" className="text-[11px] font-normal text-amber-700 bg-amber-50/70 border-amber-200">
+                            {parsedMentions.length} {parsedMentions.length === 1 ? "alert" : "alerts"}
+                          </Badge>
+                        </div>
+                        <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">
+                          Times you, your project, or monitored keywords were spoken.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-base text-slate-900">Name & Keyword Alerts</CardTitle>
-                      <CardDescription className="text-xs">
-                        Times you or your project were brought up during the call.
-                      </CardDescription>
+                    <div className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600">
+                      <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", !collapsedSections.mentions && "rotate-180")} />
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {parsedMentions.map((m, idx) => (
-                    <div key={idx} className="p-3 rounded-lg bg-white border border-amber-200/80 shadow-2xs flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                            {m.keyword}
-                          </span>
-                          <span className="text-xs text-slate-400">at {m.timestamp}</span>
+                {!collapsedSections.mentions && (
+                  <CardContent className="p-4 sm:p-5 pt-0 space-y-2.5 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                    {parsedMentions.map((m, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs flex flex-col sm:flex-row sm:items-start justify-between gap-3"
+                      >
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                              {m.keyword}
+                            </span>
+                            {m.speaker && (
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                Spoken by <strong className="font-semibold text-slate-900 dark:text-slate-100">{m.speaker}</strong>
+                              </span>
+                            )}
+                            <span className="text-xs text-slate-400">· {m.timestamp}</span>
+                          </div>
+                          <p className="text-sm text-slate-800 dark:text-slate-200 italic pl-3 border-l-2 border-amber-300 dark:border-amber-700">
+                            "{m.context}"
+                          </p>
                         </div>
-                        <p className="text-sm text-slate-800 italic">{m.context}</p>
+                        <Badge variant="outline" className="text-[11px] text-amber-700 border-amber-300 shrink-0 self-start">
+                          Attention
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="text-[11px] text-amber-700 border-amber-300 shrink-0">
-                        Attention
-                      </Badge>
-                    </div>
-                  ))}
-                </CardContent>
+                    ))}
+                  </CardContent>
+                )}
               </Card>
             )}
 
             {/* 3. QUESTIONS ASKED BY ATTENDEES */}
             {parsedQuestions.length > 0 && (
-              <Card className="border-slate-200/80 shadow-sm">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700">
-                      <MessageSquare className="h-4 w-4" />
+              <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+                <CardHeader
+                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  onClick={() => toggleSection("questions")}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/50 flex items-center justify-center text-sky-600 shrink-0">
+                        <MessageSquare className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                            Questions from Attendees
+                          </CardTitle>
+                          <Badge variant="outline" className="text-[11px] font-normal text-sky-700 bg-sky-50/70 border-sky-200">
+                            {parsedQuestions.length} {parsedQuestions.length === 1 ? "question" : "questions"}
+                          </Badge>
+                        </div>
+                        <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">
+                          Captured from spoken questions and Google Meet chat during the call.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-base text-slate-900">Questions from Attendees</CardTitle>
-                      <CardDescription className="text-xs">
-                        Captured from the Google Meet chat during the presentation.
-                      </CardDescription>
+                    <div className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600">
+                      <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", !collapsedSections.questions && "rotate-180")} />
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {parsedQuestions.map((q) => (
-                    <div key={q.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-start gap-3">
-                      <HelpCircle className="h-4 w-4 text-sky-500 shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900">{q.author}</span>
-                          <span className="text-[11px] text-slate-400">{q.timestamp}</span>
+                {!collapsedSections.questions && (
+                  <CardContent className="p-4 sm:p-5 pt-0 space-y-2.5 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                    {parsedQuestions.map((q) => {
+                      const initials = q.author
+                        .split(" ")
+                        .filter(Boolean)
+                        .map((p) => p[0])
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase();
+                      return (
+                        <div
+                          key={q.id}
+                          className="p-3.5 rounded-xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 flex items-start gap-3"
+                        >
+                          <span className="w-7 h-7 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                            {initials || "Q"}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                {q.author}
+                              </span>
+                              {q.timestamp && (
+                                <span className="text-[11px] text-slate-400">{q.timestamp}</span>
+                              )}
+                            </div>
+                            <p className="text-sm text-slate-800 dark:text-slate-200 mt-1 leading-relaxed">
+                              {q.question}
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-sm text-slate-800 mt-0.5">{q.question}</p>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
+                      );
+                    })}
+                  </CardContent>
+                )}
               </Card>
             )}
 
             {/* 4. READY-TO-SEND FOLLOW-UP EMAIL DRAFT */}
             {meeting.followUpDraft && (
-              <Card className="border-slate-200/80 shadow-sm">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700">
+              <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+                <CardHeader
+                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  onClick={() => toggleSection("email")}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 shrink-0">
                         <Send className="h-4 w-4" />
                       </div>
-                      <div>
-                        <CardTitle className="text-base text-slate-900">One-Click Follow-Up Email</CardTitle>
-                        <CardDescription className="text-xs">
-                          Pre-written draft ready to send to meeting participants.
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                            One-Click Follow-Up Email
+                          </CardTitle>
+                          <Badge variant="outline" className="text-[11px] font-normal text-emerald-700 bg-emerald-50/70 border-emerald-200">
+                            Ready to send
+                          </Badge>
+                        </div>
+                        <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">
+                          Pre-written draft addressing recap points and attendees by name.
                         </CardDescription>
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyToClipboard(meeting.followUpDraft)}
-                      className="h-8 gap-1.5 text-xs font-semibold"
-                    >
-                      {copiedDraft ? (
-                        <>
-                          <Check className="h-3.5 w-3.5 text-emerald-600" />
-                          <span className="text-emerald-600">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3.5 w-3.5" />
-                          Copy Draft
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(meeting.followUpDraft);
+                        }}
+                        className="h-8 gap-1.5 text-xs font-semibold"
+                      >
+                        {copiedDraft ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-600" />
+                            <span className="text-emerald-600">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            Copy Draft
+                          </>
+                        )}
+                      </Button>
+                      <div className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600">
+                        <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", !collapsedSections.email && "rotate-180")} />
+                      </div>
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <pre className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">
-                    {meeting.followUpDraft}
-                  </pre>
-                </CardContent>
+                {!collapsedSections.email && (
+                  <CardContent className="p-4 sm:p-5 pt-0 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                    <pre className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
+                      {meeting.followUpDraft}
+                    </pre>
+                  </CardContent>
+                )}
               </Card>
             )}
 
             {/* 5. MEETING MATERIALS (What was fed to the AI) */}
-            <Card className="border-slate-200/80 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base text-slate-900">Agent Brief & Materials Fed</CardTitle>
-                <CardDescription className="text-xs">The presentation, document, or instructions given to the agent.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Intro announcement */}
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                    Polite Announcement Spoken Upon Joining
-                  </p>
-                  <p className="text-xs text-slate-800 italic">
-                    "{meeting.introMessage || `Hi everyone! I'm Odally here on behalf of the presenter. I'll be sharing their material and taking notes for them today.`}"
-                  </p>
+            <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+              <CardHeader
+                className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                onClick={() => toggleSection("materials")}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 shrink-0">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          Agent Brief & Materials Fed
+                        </CardTitle>
+                        <Badge variant="outline" className="text-[11px] font-normal text-slate-600 bg-slate-50 border-slate-200">
+                          {meeting.videoId ? "Video presentation" : meeting.documentName ? "Document attached" : "Notes & Brief"}
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">
+                        The presentation, document, or instructions given to the agent.
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <div className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600">
+                    <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", !collapsedSections.materials && "rotate-180")} />
+                  </div>
                 </div>
+              </CardHeader>
+              {!collapsedSections.materials && (
+                <CardContent className="p-4 sm:p-5 pt-0 space-y-4 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                  {/* Intro announcement */}
+                  <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                      Polite Announcement Spoken Upon Joining
+                    </p>
+                    <p className="text-xs text-slate-800 dark:text-slate-200 italic">
+                      "{meeting.introMessage || `Hi everyone! I'm Odally here on behalf of the presenter. I'll be sharing their material and taking notes for them today.`}"
+                    </p>
+                  </div>
 
-                {/* Document or Notes */}
-                {meeting.documentName && (
-                  <div className="flex items-center justify-between p-3.5 rounded-xl border border-sky-200 bg-sky-50/30">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-sky-100 flex items-center justify-center text-sky-600">
-                        <FileText className="h-5 w-5" />
+                  {/* Document or Notes */}
+                  {meeting.documentName && (
+                    <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/40">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{meeting.documentName}</p>
+                          <p className="text-xs text-slate-500">Document fed to the agent</p>
+                        </div>
+                      </div>
+                      {meeting.documentUrl && (
+                        <a
+                          href={meeting.documentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button variant="outline" size="sm" className="h-8 text-xs">
+                            <ExternalLink className="h-3.5 w-3.5 mr-1" /> View File
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Talking Points */}
+                  {meeting.talkingPoints && (
+                    <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        Talking Points & Instructions
+                      </p>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{meeting.talkingPoints}</p>
+                    </div>
+                  )}
+
+                  {/* Video Presentation */}
+                  {meeting.videoId && (
+                    <div className="flex items-center gap-4 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/40">
+                      <div className="h-12 w-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500">
+                        <VideoIcon className="h-6 w-6" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{meeting.documentName}</p>
-                        <p className="text-xs text-slate-500">Document fed to the agent</p>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{meeting.video?.title || meeting.videoTitle || "Video Presentation"}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{meeting.video?.durationFormatted || meeting.videoDuration || "Presentation video"}</p>
                       </div>
                     </div>
-                    {meeting.documentUrl && (
-                      <a href={meeting.documentUrl} target="_blank" rel="noreferrer">
-                        <Button variant="outline" size="sm" className="h-8 text-xs">
-                          <ExternalLink className="h-3.5 w-3.5 mr-1" /> View File
-                        </Button>
-                      </a>
-                    )}
-                  </div>
-                )}
+                  )}
 
-                {/* Talking Points */}
-                {meeting.talkingPoints && (
-                  <div className="p-3.5 rounded-xl border border-slate-200">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                      Talking Points & Instructions
-                    </p>
-                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{meeting.talkingPoints}</p>
-                  </div>
-                )}
-
-                {/* Video Presentation */}
-                {meeting.videoId && (
-                  <div className="flex items-center gap-4 p-3.5 rounded-xl border border-slate-200">
-                    <div className="h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                      <VideoIcon className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{meeting.video?.title || meeting.videoTitle || "Video Presentation"}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{meeting.video?.durationFormatted || meeting.videoDuration || "Presentation video"}</p>
-                    </div>
-                  </div>
-                )}
-
-                {!meeting.documentName && !meeting.talkingPoints && !meeting.videoId && (
-                  <p className="text-xs text-slate-400">Silent attendee mode — agent joined to take notes and monitor discussion.</p>
-                )}
-              </CardContent>
+                  {!meeting.documentName && !meeting.talkingPoints && !meeting.videoId && (
+                    <p className="text-xs text-slate-400">Silent attendee mode — agent joined to take notes and monitor discussion.</p>
+                  )}
+                </CardContent>
+              )}
             </Card>
 
             {/* 6. EXECUTION LOG TIMELINE */}
-            <Card className="border-slate-200/80 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base text-slate-900">Execution Log</CardTitle>
-                <CardDescription className="text-xs">Live step-by-step audit of the agent's actions.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-0 relative">
-                  <div className="absolute left-3 top-2 bottom-2 w-px bg-slate-200" />
-                  {timeline.length ? (
-                    timeline.map((item) => (
-                      <div key={item.id} className="flex gap-4 pb-4 relative">
-                        <div
-                          className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                            item.type === "success" ? "bg-emerald-100" : "bg-sky-50"
-                          }`}
-                        >
-                          <div
-                            className={`h-2 w-2 rounded-full ${
-                              item.type === "success" ? "bg-emerald-500" : "bg-sky-500"
-                            }`}
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-slate-900">{item.event}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{formatTime(item.timestamp)}</p>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="detail-timeline-empty py-4 text-center">
-                      <p className="text-sm text-slate-500 font-medium">{status}</p>
-                      <span className="text-xs text-slate-400">
-                        {formatDate(meeting.scheduledAt)} · {formatTime(meeting.scheduledAt)}
-                      </span>
+            <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+              <CardHeader
+                className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                onClick={() => toggleSection("execution")}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0">
+                      <Clock className="h-4 w-4" />
                     </div>
-                  )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          Execution Log
+                        </CardTitle>
+                        <Badge variant="outline" className="text-[11px] font-normal text-slate-600 bg-slate-50 border-slate-200">
+                          {timeline.length} {timeline.length === 1 ? "event" : "events"}
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">
+                        Live step-by-step audit of the agent's actions.
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <div className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600">
+                    <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", !collapsedSections.execution && "rotate-180")} />
+                  </div>
                 </div>
-              </CardContent>
+              </CardHeader>
+              {!collapsedSections.execution && (
+                <CardContent className="p-4 sm:p-5 pt-0 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                  <div className="space-y-0 relative">
+                    <div className="absolute left-3 top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" />
+                    {timeline.length ? (
+                      timeline.map((item) => (
+                        <div key={item.id} className="flex gap-4 pb-4 relative">
+                          <div
+                            className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                              item.type === "success" ? "bg-emerald-100 dark:bg-emerald-950" : "bg-sky-50 dark:bg-sky-950"
+                            }`}
+                          >
+                            <div
+                              className={`h-2 w-2 rounded-full ${
+                                item.type === "success" ? "bg-emerald-500" : "bg-sky-500"
+                              }`}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.event}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{formatTime(item.timestamp)}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="detail-timeline-empty py-4 text-center">
+                        <p className="text-sm text-slate-500 font-medium">{status}</p>
+                        <span className="text-xs text-slate-400">
+                          {formatDate(meeting.scheduledAt)} · {formatTime(meeting.scheduledAt)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              )}
             </Card>
           </div>
 

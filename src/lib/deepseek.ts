@@ -57,7 +57,7 @@ export async function generateMeetingSummaryWithAI(params: {
   keywordAlerts?: string | null;
   detectedMentions?: any[];
   attendeeQuestions?: any[];
-}): Promise<{ bullets: string[]; actionItems: string[] }> {
+}): Promise<{ bullets: string[]; actionItems: string[]; attendees?: string[] }> {
   const {
     title,
     userName,
@@ -68,6 +68,34 @@ export async function generateMeetingSummaryWithAI(params: {
     attendeeQuestions = [],
   } = params;
 
+  // Extract known attendees & speakers from detected mentions and questions
+  const knownParticipants = new Set<string>();
+  if (Array.isArray(detectedMentions)) {
+    for (const m of detectedMentions) {
+      if (m?.speaker && !m.speaker.toLowerCase().includes("odally") && !m.speaker.toLowerCase().includes("you")) {
+        knownParticipants.add(m.speaker.trim());
+      }
+    }
+  }
+  if (Array.isArray(attendeeQuestions)) {
+    for (const q of attendeeQuestions) {
+      if (typeof q === "string") {
+        const parts = q.split(":");
+        if (parts.length > 1 && parts[0].trim()) {
+          const name = parts[0].trim();
+          if (!name.toLowerCase().includes("odally") && !name.toLowerCase().includes("you")) {
+            knownParticipants.add(name);
+          }
+        }
+      } else if (q?.author || q?.speaker) {
+        const name = (q.author || q.speaker).trim();
+        if (!name.toLowerCase().includes("odally") && !name.toLowerCase().includes("you")) {
+          knownParticipants.add(name);
+        }
+      }
+    }
+  }
+
   const prompt = `You are Odally, an AI meeting surrogate agent that attended the Google Meet session "${title}" on behalf of ${userName}.
 
 Meeting Context:
@@ -76,17 +104,25 @@ Meeting Context:
 - Fed Talking Points/Briefing: ${talkingPoints || "None specified"}
 - Attached Document: ${documentName || "None"}
 - Keywords Watched: ${keywordAlerts || "None"}
-- Mentioned during call: ${JSON.stringify(detectedMentions)}
+- Known Participants/Speakers Identified: ${JSON.stringify(Array.from(knownParticipants))}
+- Mentions detected during call: ${JSON.stringify(detectedMentions)}
 - Questions asked by attendees: ${JSON.stringify(attendeeQuestions)}
 
-Generate an executive post-meeting recap.
-Return ONLY a valid JSON object with exactly these two keys (no markdown formatting, no code fences):
+Instructions for the executive recap:
+1. List all people/attendees who attended, spoke, or raised questions in the "attendees" array. Include names from the context above.
+2. In "bullets", provide 3 to 4 concise, high-impact bullet points. CRITICAL: Explicitly mention the names of people who asked questions, spoke, or contributed (e.g. "Sarah Chen raised questions regarding...", "David Miller inquired about...").
+3. In "actionItems", provide 2 to 3 concrete next steps for ${userName} or the attendees, explicitly assigning actions to individuals whenever applicable.
+
+Return ONLY a valid JSON object with exactly these keys (no markdown formatting, no code fences):
 {
+  "attendees": [
+    "Full Name of participant"
+  ],
   "bullets": [
-    "3 to 4 concise, high-impact bullet points summarizing what was presented, discussed, and key points of alignment"
+    "Concise recap point explicitly mentioning participants by name..."
   ],
   "actionItems": [
-    "2 to 3 concrete, actionable next steps for ${userName} or the team"
+    "Action item for ${userName} or team member..."
   ]
 }`;
 
@@ -100,7 +136,12 @@ Return ONLY a valid JSON object with exactly these two keys (no markdown formatt
     const cleaned = raw.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
     const parsed = JSON.parse(cleaned);
 
+    const extractedAttendees = Array.isArray(parsed.attendees) && parsed.attendees.length > 0
+      ? parsed.attendees
+      : Array.from(knownParticipants);
+
     return {
+      attendees: extractedAttendees,
       bullets: Array.isArray(parsed.bullets) && parsed.bullets.length > 0 ? parsed.bullets : [
         `Odally attended "${title}" on behalf of ${userName}.`,
         talkingPoints ? `Presented: ${talkingPoints.slice(0, 100)}...` : `Represented ${userName} during discussion.`,
@@ -114,6 +155,7 @@ Return ONLY a valid JSON object with exactly these two keys (no markdown formatt
   } catch (err) {
     console.warn("[DeepSeek] Summary generation failed, using intelligent fallback:", err);
     return {
+      attendees: Array.from(knownParticipants),
       bullets: [
         `The Odally agent attended "${title}" on behalf of ${userName}.`,
         talkingPoints ? `Highlighted core briefing points: "${talkingPoints.slice(0, 120)}..."` : `Monitored discussion items and attendee interaction.`,

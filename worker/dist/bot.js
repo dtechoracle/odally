@@ -821,7 +821,12 @@ async function runMeetingBot(options) {
                                                 "Authorization": `Bearer ${workerSecret}`,
                                             },
                                             body: JSON.stringify({
-                                                attendeeQuestions: JSON.stringify([`${cap.speaker}: ${cap.text}`]),
+                                                attendeeQuestions: JSON.stringify([{
+                                                        id: `spoken-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                                                        author: cap.speaker || "Attendee",
+                                                        question: cap.text,
+                                                        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                                                    }]),
                                             }),
                                         });
                                     }
