@@ -147,41 +147,9 @@ function MeetingDetailContent() {
     setTimeout(() => setCopiedDraft(false), 2500);
   };
 
-  if (loading) {
-    return (
-      <DashboardShell>
-        <div className="flex items-center justify-center min-h-[40vh]">
-          <p className="text-sm text-slate-500">Loading meeting details...</p>
-        </div>
-      </DashboardShell>
-    );
-  }
-
-  if (!meeting) {
-    return (
-      <DashboardShell>
-        <div className="detail-empty text-center py-12">
-          <h1 className="text-xl font-bold text-slate-900">Meeting not found</h1>
-          <p className="text-sm text-slate-500 mt-1">This meeting may have been removed.</p>
-          <Link href="/dashboard/meetings" className="mt-4 inline-block">
-            <Button size="sm">Back to meetings</Button>
-          </Link>
-        </div>
-      </DashboardShell>
-    );
-  }
-
-  const execution = getExecutionLog(meeting.id);
-  const timeline = execution?.events ?? [];
-  const active = ["scheduled", "starting_soon", "launching", "joining", "running", "presenting", "in_meeting"].includes(
-    meeting.status
-  );
-  const isLive = ["running", "joining", "launching", "presenting", "in_meeting"].includes(meeting.status);
-  const status = statusLabels[meeting.status] || meeting.status;
-
-  // Parse AI Intelligence fields if present
+  // Parse AI Intelligence fields if present (Must run before early returns for React Hook rules)
   let parsedSummary: { bullets?: string[]; actionItems?: string[]; attendees?: string[] } | null = null;
-  if (meeting.summary) {
+  if (meeting?.summary) {
     try {
       parsedSummary = JSON.parse(meeting.summary);
     } catch {
@@ -190,7 +158,7 @@ function MeetingDetailContent() {
   }
 
   let parsedMentions: Array<{ keyword: string; speaker?: string; timestamp: string; context: string }> = [];
-  if (meeting.mentions) {
+  if (meeting?.mentions) {
     try {
       const rawMentions = JSON.parse(meeting.mentions);
       if (Array.isArray(rawMentions)) {
@@ -200,7 +168,7 @@ function MeetingDetailContent() {
   }
 
   let parsedQuestions: Array<{ id: string; author: string; question: string; timestamp: string }> = [];
-  if (meeting.attendeeQuestions) {
+  if (meeting?.attendeeQuestions) {
     try {
       const rawQ = JSON.parse(meeting.attendeeQuestions);
       if (Array.isArray(rawQ)) {
@@ -258,6 +226,38 @@ function MeetingDetailContent() {
 
     return Array.from(map.values());
   }, [parsedSummary, parsedQuestions, parsedMentions]);
+
+  if (loading) {
+    return (
+      <DashboardShell>
+        <div className="flex items-center justify-center min-h-[40vh]">
+          <p className="text-sm text-slate-500">Loading meeting details...</p>
+        </div>
+      </DashboardShell>
+    );
+  }
+
+  if (!meeting) {
+    return (
+      <DashboardShell>
+        <div className="detail-empty text-center py-12">
+          <h1 className="text-xl font-bold text-slate-900">Meeting not found</h1>
+          <p className="text-sm text-slate-500 mt-1">This meeting may have been removed.</p>
+          <Link href="/dashboard/meetings" className="mt-4 inline-block">
+            <Button size="sm">Back to meetings</Button>
+          </Link>
+        </div>
+      </DashboardShell>
+    );
+  }
+
+  const execution = getExecutionLog(meeting.id);
+  const timeline = execution?.events ?? [];
+  const active = ["scheduled", "starting_soon", "launching", "joining", "running", "presenting", "in_meeting"].includes(
+    meeting.status
+  );
+  const isLive = ["running", "joining", "launching", "presenting", "in_meeting"].includes(meeting.status);
+  const status = statusLabels[meeting.status] || meeting.status;
 
   return (
     <DashboardShell>
