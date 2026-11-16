@@ -340,23 +340,23 @@ function MeetingDetailContent() {
             
             {/* 1. POST-MEETING AI SUMMARY & ACTION ITEMS */}
             {(meeting.status === "completed" || meeting.summary) && (
-              <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+              <Card className="border-slate-200/80 bg-white shadow-xs rounded-xl overflow-hidden transition-all duration-200">
                 <CardHeader
-                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 transition-colors"
                   onClick={() => toggleSection("summary")}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
                         <Sparkles className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          <CardTitle className="text-base font-semibold text-slate-900">
                             Post-Meeting Executive Summary
                           </CardTitle>
                           {identifiedAttendees.length > 0 && (
-                            <Badge variant="outline" className="text-[11px] font-normal text-indigo-700 bg-indigo-50/70 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
+                            <Badge variant="outline" className="text-[11px] font-normal text-indigo-700 bg-indigo-50/70 border-indigo-200">
                               <Users className="h-3 w-3 mr-1 inline" />
                               {identifiedAttendees.length} {identifiedAttendees.length === 1 ? "participant" : "participants"}
                             </Badge>
@@ -388,12 +388,12 @@ function MeetingDetailContent() {
 
                   {/* Collapsed One-Line Preview */}
                   {collapsedSections.summary && parsedSummary && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 text-xs text-slate-500">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300 shrink-0">Preview:</span>
-                      <span className="truncate italic text-slate-600 dark:text-slate-400">
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-500">
+                      <span className="font-semibold text-slate-700 shrink-0">Preview:</span>
+                      <span className="truncate italic text-slate-600">
                         {parsedSummary.bullets?.[0] || "Click to view full executive summary"}
                       </span>
-                      <span className="ml-auto text-[11px] text-indigo-600 dark:text-indigo-400 font-medium shrink-0">
+                      <span className="ml-auto text-[11px] text-indigo-600 font-medium shrink-0">
                         Click to view
                       </span>
                     </div>
@@ -401,16 +401,16 @@ function MeetingDetailContent() {
                 </CardHeader>
 
                 {!collapsedSections.summary && (
-                  <CardContent className="p-4 sm:p-5 pt-0 space-y-5 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                  <CardContent className="p-4 sm:p-5 pt-0 space-y-5 border-t border-slate-100 mt-1">
                     {parsedSummary ? (
                       <>
                         {/* 1.1 Attendees & Participants Row */}
                         {identifiedAttendees.length > 0 && (
-                          <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+                          <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80">
                             <div className="flex items-center justify-between mb-2.5">
                               <div className="flex items-center gap-1.5">
-                                <Users className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                                <Users className="h-3.5 w-3.5 text-indigo-600" />
+                                <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                                   Identified Attendees & Speakers ({identifiedAttendees.length})
                                 </span>
                               </div>
@@ -428,9 +428,9 @@ function MeetingDetailContent() {
                                 return (
                                   <div
                                     key={i}
-                                    className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xs text-xs font-medium text-slate-800 dark:text-slate-200"
+                                    className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs text-xs font-medium text-slate-800"
                                   >
-                                    <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center shrink-0">
                                       {initials || "P"}
                                     </span>
                                     <span>{name}</span>
@@ -443,16 +443,16 @@ function MeetingDetailContent() {
 
                         {/* 1.2 Executive Recap Bullets */}
                         <div className="space-y-2.5">
-                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                             Executive Highlights & Discussions
                           </p>
                           <div className="space-y-2">
                             {parsedSummary.bullets?.map((b, i) => (
                               <div
                                 key={i}
-                                className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/70 dark:border-slate-700/60 text-sm text-slate-800 dark:text-slate-200 leading-relaxed"
+                                className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50/60 border border-slate-200/70 text-sm text-slate-800 leading-relaxed"
                               >
-                                <span className="w-5 h-5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5">
+                                <span className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5">
                                   {i + 1}
                                 </span>
                                 <div className="flex-1">{b}</div>
@@ -463,17 +463,17 @@ function MeetingDetailContent() {
 
                         {/* 1.3 Action Items */}
                         {parsedSummary.actionItems && parsedSummary.actionItems.length > 0 && (
-                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
-                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                          <div className="pt-2 border-t border-slate-100 space-y-2.5">
+                            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                               Next Steps & Action Items
                             </p>
                             <div className="space-y-2">
                               {parsedSummary.actionItems.map((act, i) => (
                                 <div
                                   key={i}
-                                  className="flex items-start gap-3 p-3.5 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 text-sm text-slate-800 dark:text-slate-200"
+                                  className="flex items-start gap-3 p-3.5 rounded-xl bg-emerald-50/40 border border-emerald-200/60 text-sm text-slate-800"
                                 >
-                                  <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs flex items-center justify-center shrink-0 font-bold mt-0.5">
+                                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-xs flex items-center justify-center shrink-0 font-bold mt-0.5">
                                     ✓
                                   </div>
                                   <div className="flex-1 font-medium leading-relaxed">{act}</div>
@@ -504,19 +504,19 @@ function MeetingDetailContent() {
 
             {/* 2. "DID THEY MENTION MY NAME?" ALERTS */}
             {parsedMentions.length > 0 && (
-              <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+              <Card className="border-slate-200/80 bg-white shadow-xs rounded-xl overflow-hidden transition-all duration-200">
                 <CardHeader
-                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 transition-colors"
                   onClick={() => toggleSection("mentions")}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
                         <AlertTriangle className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          <CardTitle className="text-base font-semibold text-slate-900">
                             Name & Keyword Alerts
                           </CardTitle>
                           <Badge variant="outline" className="text-[11px] font-normal text-amber-700 bg-amber-50/70 border-amber-200">
@@ -534,25 +534,25 @@ function MeetingDetailContent() {
                   </div>
                 </CardHeader>
                 {!collapsedSections.mentions && (
-                  <CardContent className="p-4 sm:p-5 pt-0 space-y-2.5 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                  <CardContent className="p-4 sm:p-5 pt-0 space-y-2.5 border-t border-slate-100 mt-1">
                     {parsedMentions.map((m, idx) => (
                       <div
                         key={idx}
-                        className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs flex flex-col sm:flex-row sm:items-start justify-between gap-3"
+                        className="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-start justify-between gap-3"
                       >
                         <div className="space-y-1.5 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
                               {m.keyword}
                             </span>
                             {m.speaker && (
-                              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                                Spoken by <strong className="font-semibold text-slate-900 dark:text-slate-100">{m.speaker}</strong>
+                              <span className="text-xs font-medium text-slate-700">
+                                Spoken by <strong className="font-semibold text-slate-900">{m.speaker}</strong>
                               </span>
                             )}
                             <span className="text-xs text-slate-400">· {m.timestamp}</span>
                           </div>
-                          <p className="text-sm text-slate-800 dark:text-slate-200 italic pl-3 border-l-2 border-amber-300 dark:border-amber-700">
+                          <p className="text-sm text-slate-800 italic pl-3 border-l-2 border-amber-300">
                             "{m.context}"
                           </p>
                         </div>
@@ -568,19 +568,19 @@ function MeetingDetailContent() {
 
             {/* 3. QUESTIONS ASKED BY ATTENDEES */}
             {parsedQuestions.length > 0 && (
-              <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+              <Card className="border-slate-200/80 bg-white shadow-xs rounded-xl overflow-hidden transition-all duration-200">
                 <CardHeader
-                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 transition-colors"
                   onClick={() => toggleSection("questions")}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/50 flex items-center justify-center text-sky-600 shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
                         <MessageSquare className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          <CardTitle className="text-base font-semibold text-slate-900">
                             Questions from Attendees
                           </CardTitle>
                           <Badge variant="outline" className="text-[11px] font-normal text-sky-700 bg-sky-50/70 border-sky-200">
@@ -598,7 +598,7 @@ function MeetingDetailContent() {
                   </div>
                 </CardHeader>
                 {!collapsedSections.questions && (
-                  <CardContent className="p-4 sm:p-5 pt-0 space-y-2.5 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                  <CardContent className="p-4 sm:p-5 pt-0 space-y-2.5 border-t border-slate-100 mt-1">
                     {parsedQuestions.map((q) => {
                       const initials = q.author
                         .split(" ")
@@ -610,21 +610,21 @@ function MeetingDetailContent() {
                       return (
                         <div
                           key={q.id}
-                          className="p-3.5 rounded-xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 flex items-start gap-3"
+                          className="p-3.5 rounded-xl bg-slate-50/60 border border-slate-200/80 flex items-start gap-3"
                         >
-                          <span className="w-7 h-7 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                          <span className="w-7 h-7 rounded-full bg-sky-100 text-sky-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                             {initials || "Q"}
                           </span>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                              <span className="text-xs font-bold text-slate-900">
                                 {q.author}
                               </span>
                               {q.timestamp && (
                                 <span className="text-[11px] text-slate-400">{q.timestamp}</span>
                               )}
                             </div>
-                            <p className="text-sm text-slate-800 dark:text-slate-200 mt-1 leading-relaxed">
+                            <p className="text-sm text-slate-800 mt-1 leading-relaxed">
                               {q.question}
                             </p>
                           </div>
@@ -638,19 +638,19 @@ function MeetingDetailContent() {
 
             {/* 4. READY-TO-SEND FOLLOW-UP EMAIL DRAFT */}
             {meeting.followUpDraft && (
-              <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+              <Card className="border-slate-200/80 bg-white shadow-xs rounded-xl overflow-hidden transition-all duration-200">
                 <CardHeader
-                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 transition-colors"
                   onClick={() => toggleSection("email")}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
                         <Send className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          <CardTitle className="text-base font-semibold text-slate-900">
                             One-Click Follow-Up Email
                           </CardTitle>
                           <Badge variant="outline" className="text-[11px] font-normal text-emerald-700 bg-emerald-50/70 border-emerald-200">
@@ -691,8 +691,8 @@ function MeetingDetailContent() {
                   </div>
                 </CardHeader>
                 {!collapsedSections.email && (
-                  <CardContent className="p-4 sm:p-5 pt-0 border-t border-slate-100 dark:border-slate-800/80 mt-1">
-                    <pre className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
+                  <CardContent className="p-4 sm:p-5 pt-0 border-t border-slate-100 mt-1">
+                    <pre className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">
                       {meeting.followUpDraft}
                     </pre>
                   </CardContent>
@@ -701,19 +701,19 @@ function MeetingDetailContent() {
             )}
 
             {/* 5. MEETING MATERIALS (What was fed to the AI) */}
-            <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+            <Card className="border-slate-200/80 bg-white shadow-xs rounded-xl overflow-hidden transition-all duration-200">
               <CardHeader
-                className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 transition-colors"
                 onClick={() => toggleSection("materials")}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
                       <FileText className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                        <CardTitle className="text-base font-semibold text-slate-900">
                           Agent Brief & Materials Fed
                         </CardTitle>
                         <Badge variant="outline" className="text-[11px] font-normal text-slate-600 bg-slate-50 border-slate-200">
@@ -731,26 +731,26 @@ function MeetingDetailContent() {
                 </div>
               </CardHeader>
               {!collapsedSections.materials && (
-                <CardContent className="p-4 sm:p-5 pt-0 space-y-4 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                <CardContent className="p-4 sm:p-5 pt-0 space-y-4 border-t border-slate-100 mt-1">
                   {/* Intro announcement */}
-                  <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+                  <div className="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                       Polite Announcement Spoken Upon Joining
                     </p>
-                    <p className="text-xs text-slate-800 dark:text-slate-200 italic">
+                    <p className="text-xs text-slate-800 italic">
                       "{meeting.introMessage || `Hi everyone! I'm Odally here on behalf of the presenter. I'll be sharing their material and taking notes for them today.`}"
                     </p>
                   </div>
 
                   {/* Document or Notes */}
                   {meeting.documentName && (
-                    <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/40">
+                    <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50/40">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600">
+                        <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
                           <FileText className="h-5 w-5" />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{meeting.documentName}</p>
+                          <p className="text-sm font-semibold text-slate-900">{meeting.documentName}</p>
                           <p className="text-xs text-slate-500">Document fed to the agent</p>
                         </div>
                       </div>
@@ -771,22 +771,22 @@ function MeetingDetailContent() {
 
                   {/* Talking Points */}
                   {meeting.talkingPoints && (
-                    <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
                       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                         Talking Points & Instructions
                       </p>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{meeting.talkingPoints}</p>
+                      <p className="text-xs text-slate-700 whitespace-pre-wrap">{meeting.talkingPoints}</p>
                     </div>
                   )}
 
                   {/* Video Presentation */}
                   {meeting.videoId && (
-                    <div className="flex items-center gap-4 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/40">
-                      <div className="h-12 w-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500">
+                    <div className="flex items-center gap-4 p-3.5 rounded-xl border border-slate-200 bg-slate-50/40">
+                      <div className="h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
                         <VideoIcon className="h-6 w-6" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{meeting.video?.title || meeting.videoTitle || "Video Presentation"}</p>
+                        <p className="text-sm font-semibold text-slate-900">{meeting.video?.title || meeting.videoTitle || "Video Presentation"}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{meeting.video?.durationFormatted || meeting.videoDuration || "Presentation video"}</p>
                       </div>
                     </div>
@@ -800,19 +800,19 @@ function MeetingDetailContent() {
             </Card>
 
             {/* 6. EXECUTION LOG TIMELINE */}
-            <Card className="border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-xl overflow-hidden transition-all duration-200">
+            <Card className="border-slate-200/80 bg-white shadow-xs rounded-xl overflow-hidden transition-all duration-200">
               <CardHeader
-                className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                className="p-4 sm:p-5 cursor-pointer select-none hover:bg-slate-50/70 transition-colors"
                 onClick={() => toggleSection("execution")}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700 shrink-0">
                       <Clock className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                        <CardTitle className="text-base font-semibold text-slate-900">
                           Execution Log
                         </CardTitle>
                         <Badge variant="outline" className="text-[11px] font-normal text-slate-600 bg-slate-50 border-slate-200">
@@ -830,15 +830,15 @@ function MeetingDetailContent() {
                 </div>
               </CardHeader>
               {!collapsedSections.execution && (
-                <CardContent className="p-4 sm:p-5 pt-0 border-t border-slate-100 dark:border-slate-800/80 mt-1">
+                <CardContent className="p-4 sm:p-5 pt-0 border-t border-slate-100 mt-1">
                   <div className="space-y-0 relative">
-                    <div className="absolute left-3 top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" />
+                    <div className="absolute left-3 top-2 bottom-2 w-px bg-slate-200" />
                     {timeline.length ? (
                       timeline.map((item) => (
                         <div key={item.id} className="flex gap-4 pb-4 relative">
                           <div
                             className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                              item.type === "success" ? "bg-emerald-100 dark:bg-emerald-950" : "bg-sky-50 dark:bg-sky-950"
+                              item.type === "success" ? "bg-emerald-100" : "bg-sky-50"
                             }`}
                           >
                             <div
@@ -848,7 +848,7 @@ function MeetingDetailContent() {
                             />
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.event}</p>
+                            <p className="text-sm font-medium text-slate-900">{item.event}</p>
                             <p className="text-xs text-slate-500 mt-0.5">{formatTime(item.timestamp)}</p>
                           </div>
                         </div>
@@ -904,7 +904,7 @@ function MeetingDetailContent() {
               <CardFooter className="flex flex-col gap-2 pt-0">
                 {meeting.meetUrl && (
                   <a href={meeting.meetUrl} target="_blank" rel="noreferrer" className="w-full">
-                    <Button size="sm" className="w-full text-xs font-semibold bg-black hover:bg-slate-800 text-white">
+                    <Button size="sm" className="w-full text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white shadow-xs">
                       <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Open Google Meet
                     </Button>
                   </a>
