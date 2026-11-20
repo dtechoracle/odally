@@ -284,27 +284,89 @@ export function CalendarView({
 export default function CalendarPage() {
   const router = useRouter();
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [googleEvents, setGoogleEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  const loadMeetings = async () => {
+    try {
+      const res = await fetch("/api/meetings");
+      if (res.ok) {
+        const data = await res.json();
+        setMeetings(data.meetings || []);
+      }
+    } catch (err) {
+      console.error("Failed to load meetings for calendar:", err);
+    }
+  };
+
+  const loadGoogleEvents = async () => {
+    try {
+      const res = await fetch("/api/calendar/events");
+      if (res.ok) {
+        const data = await res.json();
+        setGoogleEvents(data.events || []);
+      }
+    } catch (err) {
+      console.error("Failed to load Google events:", err);
+    }
+  };
 
   useEffect(() => {
     setSelectedDate(new Date());
-    async function loadMeetings() {
-      try {
-        setLoading(true);
-        const res = await fetch("/api/meetings");
-        if (res.ok) {
-          const data = await res.json();
-          setMeetings(data.meetings || []);
-        }
-      } catch (err) {
-        console.error("Failed to load meetings for calendar:", err);
-      } finally {
-        setLoading(false);
-      }
+    async function init() {
+      setLoading(true);
+      await Promise.all([loadMeetings(), loadGoogleEvents()]);
+      setLoading(false);
     }
-    loadMeetings();
+    init();
   }, []);
+
+  const handleSyncGoogle = async () => {
+    setSyncingGoogle(true);
+    setSyncMessage(null);
+    try {
+      const res = await fetch("/api/calendar/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        await Promise.all([loadMeetings(), loadGoogleEvents()]);
+        setSyncMessage(
+          data.importedCount > 0
+            ? `Successfully synced ${data.importedCount} Google Meet call(s) from your calendar!`
+            : "Google Calendar checked. No new Google Meet links found."
+        );
+      } else {
+        setSyncMessage(data.error || "Could not sync Google Calendar.");
+      }
+    } catch (err: any) {
+      setSyncMessage(err?.message || "Failed to communicate with Google Calendar.");
+    } finally {
+      setSyncingGoogle(false);
+      setTimeout(() => setSyncMessage(null), 5000);
+    }
+  };
+
+  const handleImportSingleGoogleEvent = async (evt: any) => {
+    setSyncingGoogle(true);
+    try {
+      const res = await fetch("/api/calendar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: evt.id }),
+      });
+      if (res.ok) {
+        await Promise.all([loadMeetings(), loadGoogleEvents()]);
+        setSyncMessage(`Scheduled Odally for "${evt.title}"!`);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSyncingGoogle(false);
+      setTimeout(() => setSyncMessage(null), 5000);
+    }
+  };
 
   const upcoming = meetings
     .filter((meeting) =>
@@ -348,14 +410,48 @@ export default function CalendarPage() {
               Interactive timeline of your automated meetings and agent schedules.
             </p>
           </div>
-          <Button
-            size="default"
-            className="rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-sm flex items-center gap-2 self-start sm:self-auto"
-            onClick={() => router.push("/dashboard/meetings/schedule")}
-          >
-            <Plus className="h-4 w-4" /> Schedule Meeting
-          </Button>
+          <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
+            <Button
+              variant="outline"
+              size="default"
+              disabled={syncingGoogle}
+              onClick={handleSyncGoogle}
+              className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-800 shadow-2xs flex items-center gap-2 bg-white"
+            >
+              {syncingGoogle ? (
+                <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
+              ) : (
+                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+              )}
+              <span>{syncingGoogle ? "Syncing Calendar..." : "Sync Google Calendar"}</span>
+            </Button>
+            <Button
+              size="default"
+              className="rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-sm flex items-center gap-2"
+              onClick={() => router.push("/dashboard/meetings/schedule")}
+            >
+              <Plus className="h-4 w-4" /> Schedule Meeting
+            </Button>
+          </div>
         </div>
+
+        {/* Sync Status Banner */}
+        {syncMessage && (
+          <div className="p-3.5 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-800 flex items-center justify-between gap-2 shadow-2xs">
+            <span>{syncMessage}</span>
+            <button
+              onClick={() => setSyncMessage(null)}
+              className="text-sky-600 hover:text-sky-800 font-bold ml-2"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex flex-col items-center justify-center min-h-[400px] gap-3 text-slate-500 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
@@ -481,6 +577,54 @@ export default function CalendarPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Google Calendar Live Events */}
+              {googleEvents.length > 0 && (
+                <Card className="border-sky-200/80 shadow-sm rounded-2xl overflow-hidden bg-white">
+                  <div className="p-4 border-b border-sky-100 bg-sky-50/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                      </svg>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                        Google Calendar ({googleEvents.filter((e) => e.hasMeetLink).length} Meet Calls)
+                      </h3>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] text-sky-700 bg-white border-sky-200">
+                      Live
+                    </Badge>
+                  </div>
+                  <CardContent className="p-4 space-y-3 max-h-[300px] overflow-y-auto">
+                    {googleEvents.filter((e) => e.hasMeetLink).slice(0, 4).map((evt) => (
+                      <div
+                        key={evt.id}
+                        className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-sky-50/40 hover:border-sky-200 transition-all flex flex-col gap-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-bold text-slate-900 truncate">{evt.title}</p>
+                          <Badge variant="neutral" className="text-[9px] bg-sky-100 text-sky-800 shrink-0">
+                            Google Meet
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          {format(new Date(evt.scheduledAt), "MMM d")} · {formatTime(evt.scheduledAt)}
+                        </p>
+                        <Button
+                          size="sm"
+                          disabled={syncingGoogle}
+                          onClick={() => handleImportSingleGoogleEvent(evt)}
+                          className="h-7 text-[11px] font-semibold bg-sky-600 hover:bg-sky-700 text-white rounded-lg w-full mt-1"
+                        >
+                          Dispatch Odally to this Call
+                        </Button>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Upcoming Meetings List */}
               <Card className="border-slate-200/80 shadow-sm rounded-2xl overflow-hidden bg-white">
