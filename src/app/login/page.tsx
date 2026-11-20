@@ -110,6 +110,18 @@ export default function LoginPage() {
         >
           {loading ? "Redirecting to Google..." : "Continue with Google"}
         </button>
+
+        <p style={{ marginTop: 24, textAlign: "center", fontSize: 13, color: "#888" }}>
+          By continuing, you agree to Odally's{" "}
+          <a href="/terms" style={{ color: "#0284c7", textDecoration: "underline" }}>
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a href="/policy" style={{ color: "#0284c7", textDecoration: "underline" }}>
+            Privacy Policy
+          </a>
+          .
+        </p>
       </div>
     </div>
   );

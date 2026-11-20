@@ -364,7 +364,8 @@ export function LandingSections() {
                 <span className="text-[#000000] font-semibold">Company</span>
                 <Link href="#about" className="text-[#b8b8b8] hover:text-[#000000]">About</Link>
                 <Link href="#contact" className="text-[#b8b8b8] hover:text-[#000000]">Contact</Link>
-                <Link href="#privacy" className="text-[#b8b8b8] hover:text-[#000000]">Privacy</Link>
+                <Link href="/policy" className="text-[#b8b8b8] hover:text-[#000000]">Privacy Policy</Link>
+                <Link href="/terms" className="text-[#b8b8b8] hover:text-[#000000]">Terms of Service</Link>
               </div>
             </div>
           </div>
