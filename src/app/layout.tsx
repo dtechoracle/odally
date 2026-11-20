@@ -6,6 +6,9 @@ import { SessionProvider } from "@/components/layout/SessionProvider";
 export const metadata: Metadata = {
   title: "Odally",
   description: "Let your meetings run themselves",
+  verification: {
+    google: "5-G39MY0ziK97Al3WE3gYWEvqgiINazWVmsstFw-8IQ",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
