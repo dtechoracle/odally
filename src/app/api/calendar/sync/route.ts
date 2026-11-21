@@ -31,78 +31,77 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const { eventId, customTitle, talkingPoints, introMessage, keywordAlerts } = body;
 
+    if (!eventId) {
+      return NextResponse.json(
+        { error: "Event ID is required. Please select a specific call to dispatch Odally." },
+        { status: 400 }
+      );
+    }
+
     // Fetch live events from Google Calendar
     const googleEvents = await fetchGoogleCalendarEvents(user.id);
+    const targetEvent = googleEvents.find((e: any) => e.id === eventId);
 
-    // If specific eventId is requested, import that one
-    const eventsToImport = eventId
-      ? googleEvents.filter((e: any) => e.id === eventId)
-      : googleEvents.filter((e: any) => e.hasMeetLink);
+    if (!targetEvent || !targetEvent.meetUrl) {
+      return NextResponse.json(
+        { error: "Google Meet event not found or does not have a Google Meet link." },
+        { status: 404 }
+      );
+    }
 
-    if (eventsToImport.length === 0) {
+    // Check if already imported
+    const existing = await prisma.scheduledMeeting.findFirst({
+      where: {
+        userId: user.id,
+        meetUrl: targetEvent.meetUrl,
+        scheduledAt: new Date(targetEvent.scheduledAt),
+      },
+    });
+
+    if (existing) {
       return NextResponse.json({
         success: true,
-        importedCount: 0,
-        message: "No Google Meet events found to sync.",
+        alreadyImported: true,
+        meeting: existing,
+        message: `Odally is already scheduled for "${existing.title}".`,
       });
     }
 
-    const importedMeetings = [];
+    const defaultIntro = `Hi everyone! I'm Odally attending on behalf of ${
+      user.name || "the presenter"
+    }. I'll be presenting their material and taking notes today.`;
 
-    for (const evt of eventsToImport) {
-      if (!evt.meetUrl) continue;
+    const newMeeting = await prisma.scheduledMeeting.create({
+      data: {
+        userId: user.id,
+        title: customTitle || targetEvent.title,
+        meetUrl: targetEvent.meetUrl,
+        scheduledAt: new Date(targetEvent.scheduledAt),
+        timezone: user.timezone || "UTC",
+        materialType: "notes",
+        talkingPoints: talkingPoints || targetEvent.description || null,
+        introMessage: introMessage || defaultIntro,
+        keywordAlerts: keywordAlerts || user.name || null,
+        settings: { googleEventId: targetEvent.id, attendees: targetEvent.attendees },
+        status: "scheduled",
+      },
+    });
 
-      // Check if already imported
-      const existing = await prisma.scheduledMeeting.findFirst({
-        where: {
-          userId: user.id,
-          meetUrl: evt.meetUrl,
-          scheduledAt: new Date(evt.scheduledAt),
-        },
+    // Schedule background job with Inngest
+    try {
+      await inngest.send({
+        name: "meeting/scheduled",
+        data: { meetingId: newMeeting.id },
       });
-
-      if (existing) {
-        importedMeetings.push(existing);
-        continue;
-      }
-
-      const defaultIntro = `Hi everyone! I'm Odally attending on behalf of ${
-        user.name || "the presenter"
-      }. I'll be presenting their material and taking notes today.`;
-
-      const newMeeting = await prisma.scheduledMeeting.create({
-        data: {
-          userId: user.id,
-          title: customTitle || evt.title,
-          meetUrl: evt.meetUrl,
-          scheduledAt: new Date(evt.scheduledAt),
-          timezone: user.timezone || "UTC",
-          materialType: "notes",
-          talkingPoints: talkingPoints || evt.description || null,
-          introMessage: introMessage || defaultIntro,
-          keywordAlerts: keywordAlerts || user.name || null,
-          settings: { googleEventId: evt.id, attendees: evt.attendees },
-          status: "scheduled",
-        },
-      });
-
-      // Schedule background job with Inngest
-      try {
-        await inngest.send({
-          name: "meeting/scheduled",
-          data: { meetingId: newMeeting.id },
-        });
-      } catch (inngestErr) {
-        console.warn("[Inngest] Could not queue meeting event:", inngestErr);
-      }
-
-      importedMeetings.push(newMeeting);
+    } catch (inngestErr) {
+      console.warn("[Inngest] Could not queue meeting event:", inngestErr);
     }
 
     return NextResponse.json({
       success: true,
-      importedCount: importedMeetings.length,
-      meetings: importedMeetings,
+      importedCount: 1,
+      meeting: newMeeting,
+      message: `Successfully scheduled Odally for "${newMeeting.title}"!`,
     });
   } catch (error: any) {
     console.error("[Google Calendar Sync] Error:", error);

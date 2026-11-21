@@ -337,29 +337,13 @@ export default function CalendarPage() {
     setSyncingGoogle(true);
     setSyncMessage(null);
     try {
-      const res = await fetch("/api/calendar/sync", { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        await Promise.all([loadMeetings(), loadGoogleEvents()]);
-        setNeedsGoogleAuth(false);
-        setSyncMessage(
-          data.importedCount > 0
-            ? `Successfully synced ${data.importedCount} Google Meet call(s) from your calendar!`
-            : "Google Calendar checked. No new Google Meet links found."
-        );
-      } else {
-        if (data.needsAuth) {
-          setNeedsGoogleAuth(true);
-          setSyncMessage("Google Calendar access authorization required.");
-        } else {
-          setSyncMessage(data.error || "Could not sync Google Calendar.");
-        }
-      }
+      await loadGoogleEvents();
+      setSyncMessage("Google Calendar synced. Select any call to dispatch Odally.");
     } catch (err: any) {
       setSyncMessage(err?.message || "Failed to communicate with Google Calendar.");
     } finally {
       setSyncingGoogle(false);
-      setTimeout(() => setSyncMessage(null), 6000);
+      setTimeout(() => setSyncMessage(null), 5000);
     }
   };
 
@@ -371,12 +355,15 @@ export default function CalendarPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ eventId: evt.id }),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         await Promise.all([loadMeetings(), loadGoogleEvents()]);
-        setSyncMessage(`Scheduled Odally for "${evt.title}"!`);
+        setSyncMessage(data.message || `Scheduled Odally for "${evt.title}"!`);
+      } else {
+        setSyncMessage(data.error || "Could not schedule meeting.");
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setSyncMessage(e?.message || "Failed to dispatch Odally to call.");
     } finally {
       setSyncingGoogle(false);
       setTimeout(() => setSyncMessage(null), 5000);
@@ -648,30 +635,43 @@ export default function CalendarPage() {
                     </Badge>
                   </div>
                   <CardContent className="p-4 space-y-3 max-h-[300px] overflow-y-auto">
-                    {googleEvents.filter((e) => e.hasMeetLink).slice(0, 4).map((evt) => (
-                      <div
-                        key={evt.id}
-                        className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-sky-50/40 hover:border-sky-200 transition-all flex flex-col gap-2"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-xs font-bold text-slate-900 truncate">{evt.title}</p>
-                          <Badge variant="neutral" className="text-[9px] bg-sky-100 text-sky-800 shrink-0">
-                            Google Meet
-                          </Badge>
-                        </div>
-                        <p className="text-[11px] text-slate-500">
-                          {format(new Date(evt.scheduledAt), "MMM d")} · {formatTime(evt.scheduledAt)}
-                        </p>
-                        <Button
-                          size="sm"
-                          disabled={syncingGoogle}
-                          onClick={() => handleImportSingleGoogleEvent(evt)}
-                          className="h-7 text-[11px] font-semibold bg-sky-600 hover:bg-sky-700 text-white rounded-lg w-full mt-1"
+                    {googleEvents.filter((e) => e.hasMeetLink).slice(0, 6).map((evt) => {
+                      const isDispatched = meetings.some(
+                        (m) =>
+                          m.settings?.googleEventId === evt.id ||
+                          (evt.meetUrl && m.meetUrl === evt.meetUrl && format(new Date(m.scheduledAt), "yyyy-MM-dd") === format(new Date(evt.scheduledAt), "yyyy-MM-dd"))
+                      );
+                      return (
+                        <div
+                          key={evt.id}
+                          className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-sky-50/40 hover:border-sky-200 transition-all flex flex-col gap-2"
                         >
-                          Dispatch Odally to this Call
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs font-bold text-slate-900 truncate">{evt.title}</p>
+                            <Badge variant="neutral" className="text-[9px] bg-sky-100 text-sky-800 shrink-0">
+                              Google Meet
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            {format(new Date(evt.scheduledAt), "MMM d")} · {formatTime(evt.scheduledAt)}
+                          </p>
+                          {isDispatched ? (
+                            <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200/60 mt-1">
+                              ✓ Odally Dispatched
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              disabled={syncingGoogle}
+                              onClick={() => handleImportSingleGoogleEvent(evt)}
+                              className="h-7 text-[11px] font-semibold bg-sky-600 hover:bg-sky-700 text-white rounded-lg w-full mt-1"
+                            >
+                              Dispatch Odally to this Call
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </CardContent>
                 </Card>
               )}
