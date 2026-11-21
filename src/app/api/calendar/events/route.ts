@@ -1,19 +1,27 @@
-import { NextResponse } from "next/server";
+import { NextResponse, connection } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleCalendarEvents } from "@/lib/googleAuth";
 
 export async function GET() {
+  await connection();
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
+    const userId = (session.user as any)?.id;
+    let user = null;
+    if (userId) {
+      user = await prisma.user.findUnique({ where: { id: userId } });
+    }
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+      });
+    }
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -29,12 +37,20 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("[Google Calendar API] Error fetching events:", error);
+    const message = error?.message || "Failed to fetch Google Calendar events";
+    const needsAuth =
+      message.includes("No connected Google account") ||
+      message.includes("Token refresh failed") ||
+      message.includes("unauthorized_client") ||
+      message.includes("401");
+
     return NextResponse.json(
       {
-        error: error?.message || "Failed to fetch Google Calendar events",
-        needsAuth: error?.message?.includes("No connected Google account"),
+        error: message,
+        needsAuth,
       },
-      { status: 500 }
+      { status: needsAuth ? 401 : 500 }
     );
   }
 }
+

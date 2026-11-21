@@ -35,6 +35,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { formatTime } from "@/lib/utils";
+import { signIn } from "next-auth/react";
 
 const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -289,6 +290,7 @@ export default function CalendarPage() {
   const [syncingGoogle, setSyncingGoogle] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [needsGoogleAuth, setNeedsGoogleAuth] = useState(false);
 
   const loadMeetings = async () => {
     try {
@@ -305,9 +307,12 @@ export default function CalendarPage() {
   const loadGoogleEvents = async () => {
     try {
       const res = await fetch("/api/calendar/events");
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        const data = await res.json();
         setGoogleEvents(data.events || []);
+        setNeedsGoogleAuth(false);
+      } else if (data.needsAuth) {
+        setNeedsGoogleAuth(true);
       }
     } catch (err) {
       console.error("Failed to load Google events:", err);
@@ -325,26 +330,36 @@ export default function CalendarPage() {
   }, []);
 
   const handleSyncGoogle = async () => {
+    if (needsGoogleAuth) {
+      signIn("google", { callbackUrl: "/dashboard/calendar" });
+      return;
+    }
     setSyncingGoogle(true);
     setSyncMessage(null);
     try {
       const res = await fetch("/api/calendar/sync", { method: "POST" });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         await Promise.all([loadMeetings(), loadGoogleEvents()]);
+        setNeedsGoogleAuth(false);
         setSyncMessage(
           data.importedCount > 0
             ? `Successfully synced ${data.importedCount} Google Meet call(s) from your calendar!`
             : "Google Calendar checked. No new Google Meet links found."
         );
       } else {
-        setSyncMessage(data.error || "Could not sync Google Calendar.");
+        if (data.needsAuth) {
+          setNeedsGoogleAuth(true);
+          setSyncMessage("Google Calendar access authorization required.");
+        } else {
+          setSyncMessage(data.error || "Could not sync Google Calendar.");
+        }
       }
     } catch (err: any) {
       setSyncMessage(err?.message || "Failed to communicate with Google Calendar.");
     } finally {
       setSyncingGoogle(false);
-      setTimeout(() => setSyncMessage(null), 5000);
+      setTimeout(() => setSyncMessage(null), 6000);
     }
   };
 
@@ -412,11 +427,16 @@ export default function CalendarPage() {
           </div>
           <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
             <Button
-              variant="outline"
+              variant={needsGoogleAuth ? "default" : "outline"}
               size="default"
               disabled={syncingGoogle}
               onClick={handleSyncGoogle}
-              className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-800 shadow-2xs flex items-center gap-2 bg-white"
+              className={cn(
+                "rounded-xl shadow-2xs flex items-center gap-2 font-medium transition-all",
+                needsGoogleAuth
+                  ? "bg-sky-600 hover:bg-sky-700 text-white border-transparent"
+                  : "border-slate-200 hover:bg-slate-50 text-slate-800 bg-white"
+              )}
             >
               {syncingGoogle ? (
                 <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
@@ -428,7 +448,13 @@ export default function CalendarPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
               )}
-              <span>{syncingGoogle ? "Syncing Calendar..." : "Sync Google Calendar"}</span>
+              <span>
+                {syncingGoogle
+                  ? "Syncing Calendar..."
+                  : needsGoogleAuth
+                  ? "Connect Google Calendar"
+                  : "Sync Google Calendar"}
+              </span>
             </Button>
             <Button
               size="default"
@@ -439,6 +465,30 @@ export default function CalendarPage() {
             </Button>
           </div>
         </div>
+
+        {/* Google Authorization Banner */}
+        {needsGoogleAuth && (
+          <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-sm text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                <CalendarIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900">Google Calendar connection required</p>
+                <p className="text-xs text-slate-600">
+                  Connect your Google account with the new OAuth client to fetch and sync your upcoming Google Meet calls.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => signIn("google", { callbackUrl: "/dashboard/calendar" })}
+              className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-xs shrink-0 font-medium"
+            >
+              Connect Google Calendar
+            </Button>
+          </div>
+        )}
 
         {/* Sync Status Banner */}
         {syncMessage && (

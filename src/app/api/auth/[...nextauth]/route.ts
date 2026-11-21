@@ -3,14 +3,20 @@ import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 
+const isProductionHttps =
+  process.env.NODE_ENV === "production" &&
+  !process.env.NEXTAUTH_URL?.includes("localhost") &&
+  process.env.NEXTAUTH_URL?.startsWith("https://");
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
+  useSecureCookies: isProductionHttps,
 
   providers: [
     // ─── GOOGLE OAUTH ─────────────────────────────────────────────
     // This captures the user's refresh token so the bot can join
-    // Google Meet as the authenticated user.
+    // Google Meet as the authenticated user and sync calendar events.
     GoogleProvider({
       clientId:     process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -41,6 +47,43 @@ export const authOptions: NextAuthOptions = {
         token.accessToken  = account.access_token;
         token.refreshToken = account.refresh_token;
         token.expiresAt    = account.expires_at;
+
+        // Ensure database Account record has the fresh tokens
+        const resolvedUserId = (user?.id || token.id) as string;
+        if (resolvedUserId && account.providerAccountId) {
+          try {
+            await prisma.account.upsert({
+              where: {
+                provider_providerAccountId: {
+                  provider: "google",
+                  providerAccountId: account.providerAccountId,
+                },
+              },
+              create: {
+                userId: resolvedUserId,
+                type: account.type || "oauth",
+                provider: "google",
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+              },
+              update: {
+                access_token: account.access_token,
+                ...(account.refresh_token ? { refresh_token: account.refresh_token } : {}),
+                expires_at: account.expires_at,
+                scope: account.scope,
+                id_token: account.id_token,
+              },
+            });
+            console.log("[NextAuth] Persisted fresh Google OAuth tokens for user:", resolvedUserId);
+          } catch (e) {
+            console.error("[NextAuth] Failed to sync account tokens to DB:", e);
+          }
+        }
       }
       return token;
     },
@@ -57,9 +100,10 @@ export const authOptions: NextAuthOptions = {
 
   pages: { signIn: "/login" },
   secret: process.env.NEXTAUTH_SECRET,
-  debug: true,
+  debug: process.env.NODE_ENV === "development",
 };
 
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
+
 
