@@ -19,8 +19,8 @@ const navItems = [
 
 function Brand() {
   return (
-    <Link href="/dashboard" className="app-brand flex items-center py-1" aria-label="Odally overview">
-      <OdallyLogo animated className="h-6 w-auto text-slate-900" />
+    <Link href="/dashboard" className="app-brand flex items-center" aria-label="Odally overview">
+      <OdallyLogo animated className="h-8 w-auto text-slate-900" />
     </Link>
   );
 }

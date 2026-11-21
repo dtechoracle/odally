@@ -6,6 +6,15 @@ import { SessionProvider } from "@/components/layout/SessionProvider";
 export const metadata: Metadata = {
   title: "Odally",
   description: "Let your meetings run themselves",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
   verification: {
     google: "5-G39MY0ziK97Al3WE3gYWEvqgiINazWVmsstFw-8IQ",
   },

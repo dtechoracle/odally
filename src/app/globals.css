@@ -92,9 +92,9 @@ body {
   position: fixed; inset: 0 auto 0 0; z-index: 30; display: flex; flex-direction: column;
   width: var(--app-sidebar-width); padding: 22px 15px 18px; border-right: 1px solid var(--app-border); background: #fff;
 }
-.app-brand { display: inline-flex; align-items: center; gap: 10px; width: fit-content; min-height: 34px; margin: 0 0 46px 7px; color: #000; text-decoration: none; }
-.app-brand svg { width: 26px; height: 25px; flex: none; }
-.app-brand span { font-size: 16px; font-weight: 783; letter-spacing: -.0075em; white-space: nowrap; }
+.app-brand { display: inline-flex; align-items: center; width: fit-content; min-height: 38px; margin: 0 0 36px 8px; color: #000; text-decoration: none; }
+.app-brand svg { width: auto; height: 34px; max-width: 150px; flex: none; }
+.app-brand span { display: none; }
 .app-sidebar__label { padding: 0 13px; margin-bottom: 10px; color: #a1a1a1; font-size: 10px; font-weight: 600; letter-spacing: .12em; }
 .app-sidebar__links { display: grid; gap: 4px; }
 .app-sidebar__link { position: relative; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 13px; border-radius: 7px; color: #666; font-size: 13px; font-weight: 500; text-decoration: none; transition: color .18s ease, background .18s ease; }
@@ -258,6 +258,7 @@ body {
   :root { --app-sidebar-width: 76px; }
   .app-sidebar { align-items: center; padding-inline: 10px; }
   .app-brand { margin: 0 0 44px; }
+  .app-brand svg { max-width: 56px; height: 22px; }
   .app-brand span, .app-sidebar__label, .app-sidebar__link span { display: none; }
   .app-sidebar__link { justify-content: center; width: 48px; padding: 0; }
   .app-sidebar__link.is-active::before { left: -10px; }
@@ -271,7 +272,8 @@ body {
   .app-mobile-toggle { display: inline-flex; flex: none; margin-right: 8px; }
   .app-mobile-brand { display: block; }
   .app-mobile-brand .app-brand { margin: 0; }
-  .app-mobile-brand .app-brand span { font-size: 14px; }
+  .app-mobile-brand .app-brand svg { height: 26px; }
+  .app-mobile-brand .app-brand span { display: none; }
   .app-topbar__context { display: none; }
   .app-topbar__actions { gap: 7px; }
   .app-profile-name, .app-profile-button > svg { display: none; }
