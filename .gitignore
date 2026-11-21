@@ -40,6 +40,8 @@ yarn-error.log*
 # worker
 worker/bot-profile/
 *.png
+!public/*.png
+!public/**/*.png
 
 # typescript
 *.tsbuildinfo

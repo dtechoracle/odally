@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OdallyLogo } from "@/components/brand/OdallyLogo";
 
 function SimpleAgentStepper() {
   const [activeStep, setActiveStep] = useState(0);
@@ -337,12 +338,8 @@ export function LandingSections() {
         <div className="max-w-[1000px] mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between gap-12 mb-16">
             <div className="max-w-[280px]">
-              <div className="flex items-center gap-2 mb-6">
-                <svg className="w-[26px] h-[25px]" viewBox="0 0 26 25" role="img" aria-label="Odally">
-                  <rect x=".5" y=".5" width="25" height="24" rx="7" fill="#38c6ec" />
-                  <ellipse cx="13" cy="12.5" rx="5.5" ry="6" stroke="white" strokeWidth="2.2" fill="none" />
-                </svg>
-                <span className="font-black text-[17.1px] tracking-[-0.0075em]">Odally</span>
+              <div className="mb-6 flex items-center">
+                <OdallyLogo color="#000000" className="h-7 w-auto" />
               </div>
               <p className="text-[14.3px] text-[#b8b8b8] tracking-[-0.0447em]">An AI meeting agent that shows up and presents for you.</p>
             </div>

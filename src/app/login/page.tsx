@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { OdallyLogo } from "@/components/brand/OdallyLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,12 +49,8 @@ export default function LoginPage() {
     >
       <div style={{ width: "100%", maxWidth: 400, padding: "0 24px" }}>
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 48 }}>
-          <svg width="26" height="25" viewBox="0 0 26 25" aria-label="Odally">
-            <rect x=".5" y=".5" width="25" height="24" rx="7" fill="#38c6ec" />
-            <ellipse cx="13" cy="12.5" rx="5.5" ry="6" stroke="white" strokeWidth="2.2" fill="none" />
-          </svg>
-          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em" }}>Odally</span>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 48 }}>
+          <OdallyLogo animated className="h-8 w-auto text-slate-900" />
         </div>
 
         <h1 style={{ fontSize: 32, fontWeight: 400, letterSpacing: "-0.05em", lineHeight: 1.1, marginBottom: 8 }}>

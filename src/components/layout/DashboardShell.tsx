@@ -7,6 +7,7 @@ import { Activity, Bell, CalendarDays, ChevronDown, LayoutDashboard, Menu, Setti
 import { cn } from "@/lib/utils";
 import { SessionContext } from "@/components/layout/SessionProvider";
 import { getNotifications } from "@/lib/db";
+import { OdallyLogo } from "@/components/brand/OdallyLogo";
 
 const navItems = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -18,12 +19,8 @@ const navItems = [
 
 function Brand() {
   return (
-    <Link href="/dashboard" className="app-brand" aria-label="Odally overview">
-      <svg viewBox="0 0 26 25" role="img" aria-label="Odally">
-        <rect x=".5" y=".5" width="25" height="24" rx="7" fill="#38c6ec" />
-        <ellipse cx="13" cy="12.5" rx="5.5" ry="6" stroke="white" strokeWidth="2.2" fill="none" />
-      </svg>
-      <span className="font-bold">Odally</span>
+    <Link href="/dashboard" className="app-brand flex items-center py-1" aria-label="Odally overview">
+      <OdallyLogo animated className="h-6 w-auto text-slate-900" />
     </Link>
   );
 }

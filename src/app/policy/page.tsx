@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { ArrowLeft, Shield, Lock, Eye, Database, Trash2, Mail } from "lucide-react";
+import { OdallyLogo } from "@/components/brand/OdallyLogo";
 
 export const metadata = {
   title: "Privacy Policy | Odally",
@@ -13,12 +14,8 @@ export default function PolicyPage() {
       {/* Header */}
       <header className="border-b border-slate-200 bg-white sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-slate-900 font-bold text-lg hover:opacity-80 transition-opacity">
-            <svg width="26" height="25" viewBox="0 0 26 25" aria-label="Odally">
-              <rect x=".5" y=".5" width="25" height="24" rx="7" fill="#38c6ec" />
-              <ellipse cx="13" cy="12.5" rx="5.5" ry="6" stroke="white" strokeWidth="2.2" fill="none" />
-            </svg>
-            <span>Odally</span>
+          <Link href="/" className="flex items-center hover:opacity-80 transition-opacity" aria-label="Odally Home">
+            <OdallyLogo animated className="h-6 w-auto text-slate-900" />
           </Link>
           <div className="flex items-center gap-4 text-sm font-medium">
             <Link href="/terms" className="text-slate-600 hover:text-slate-900">

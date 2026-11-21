@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LandingSections } from "./LandingSections";
+import { OdallyLogo } from "@/components/brand/OdallyLogo";
 
 const VIDEO_URL =
   "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260826_125119_4963ddd4-c287-4044-b014-b68943cdd8bd.mp4";
@@ -101,9 +102,7 @@ body {
   position: absolute; left: calc(50% - 439px); top: 43px; width: 880px; height: 52px;
   border-radius: 26px; background: var(--c-surface-nav); z-index: 20;
 }
-.logo { position: absolute; left: 9px; top: 13px; width: 26px; height: 25px; flex: none; }
-.wordmark { position: absolute; left: 40px; top: 2px; height: 52px; display: flex; align-items: center; color: #fff; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
-.wordmark sup { position: relative; top: -5px; left: 1px; font-size: var(--fs-sup); font-weight: var(--fw-black); }
+.nav-brand-wrap { position: absolute; left: 20px; top: 0; height: 52px; display: flex; align-items: center; text-decoration: none; }
 .nav a.link { position: absolute; top: 0; height: 52px; display: flex; align-items: center; transform: translateX(-50%); color: #fff; font-size: var(--fs-ui); font-weight: var(--fw-medium); letter-spacing: var(--tr-ui); line-height: 1; text-decoration: none; white-space: nowrap; }
 .link.l1 { left: 279px; } .link.l2 { left: 386.5px; } .link.l3 { left: 483px; } .link.l4 { left: 571px; }
 .btn { position: absolute; border: 0; border-radius: 17px; height: 34px; display: flex; align-items: center; justify-content: center; font-family: inherit; font-size: var(--fs-ui); letter-spacing: var(--tr-cta); line-height: 1; white-space: nowrap; text-decoration: none; cursor: pointer; }
@@ -153,10 +152,9 @@ html[data-enter="pending"] .hero-h1 { clip-path: inset(0 0 100% 0); }
 html[data-enter="pending"] .nav { opacity: 0; translate: 0 -10px; }
 html[data-enter="pending"] .hero-sub, html[data-enter="pending"] .btn--hero { opacity: 0; translate: 0 14px; }
 html[data-enter="pending"] .card { opacity: 0; translate: 0 22px; }
-html[data-enter="pending"] .logo, html[data-enter="pending"] .wordmark, html[data-enter="pending"] .nav a.link, html[data-enter="pending"] .btn--nav { opacity: 0; }
+html[data-enter="pending"] .nav-brand-wrap, html[data-enter="pending"] .nav a.link, html[data-enter="pending"] .btn--nav { opacity: 0; }
 html[data-enter="run"] .nav { animation: enter-drop var(--dur-nav) var(--ease-settle) .05s both; }
-html[data-enter="run"] .logo { animation: enter-fade var(--dur-navitem) var(--ease-settle) .18s both; }
-html[data-enter="run"] .wordmark { animation: enter-fade .22s var(--ease-settle) .18s both; }
+html[data-enter="run"] .nav-brand-wrap { animation: enter-fade var(--dur-navitem) var(--ease-settle) .18s both; }
 html[data-enter="run"] .link.l1 { animation: enter-fade .26s var(--ease-settle) .22s both; }
 html[data-enter="run"] .link.l2 { animation: enter-fade .30s var(--ease-settle) .26s both; }
 html[data-enter="run"] .link.l3 { animation: enter-fade .34s var(--ease-settle) .30s both; }
@@ -183,8 +181,7 @@ html[data-enter="run"] .card { animation: enter-rise22 var(--dur-panel) var(--ea
     display: flex; align-items: center; border-radius: 26px; z-index: 50; padding: 0 12px;
   }
   .nav a.link, .btn--nav { display: none; }
-  .logo { position: static; margin-left: 2px; }
-  .wordmark { position: static; height: auto; margin-left: 8px; font-size: 18px; font-weight: 800; }
+  .nav-brand-wrap { position: static; height: 100%; display: flex; align-items: center; margin-left: 4px; }
   .burger {
     display: flex; flex-direction: column; justify-content: center; gap: 5px; width: 34px; height: 34px;
     margin-left: auto; margin-right: 2px; padding: 0 7px; border: 0; border-radius: 17px; background: none;
@@ -381,11 +378,9 @@ export default function HomePage() {
         <div id="viewport">
           <section id="stage" ref={stageRef} aria-label="Odally">
             <nav className={`nav${menuOpen ? " is-open" : ""}`} ref={navRef} aria-label="Main navigation">
-            <svg className="logo" viewBox="0 0 26 25" role="img" aria-label="Odally">
-              <rect x=".5" y=".5" width="25" height="24" rx="7" fill="#38c6ec" />
-              <ellipse cx="13" cy="12.5" rx="5.5" ry="6" stroke="white" strokeWidth="2.2" fill="none" />
-            </svg>
-            <span className="wordmark">Odally</span>
+            <a href="/" className="nav-brand-wrap" aria-label="Odally Home">
+              <OdallyLogo animated color="#ffffff" className="h-6 w-auto" />
+            </a>
             <a className="link l1" href="#product">Product</a>
             <a className="link l2" href="#how-it-works">How it works</a>
             <a className="link l3" href="#pricing">Pricing</a>
